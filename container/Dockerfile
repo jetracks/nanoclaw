@@ -3,8 +3,12 @@
 
 FROM node:22.22.0-slim
 
+ARG AGENT_BROWSER_VERSION=0.20.12
+ARG CLAUDE_CODE_VERSION=2.1.76
+
 # Install system dependencies for Chromium
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
     chromium \
     fonts-liberation \
     fonts-noto-cjk \
@@ -30,10 +34,10 @@ RUN apt-get update && apt-get install -y \
 # Set Chromium path for agent-browser
 ENV AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
-ARG AGENT_BROWSER_VERSION=0.20.12
-
-# Install agent-browser globally with an exact version
-RUN npm install -g "agent-browser@${AGENT_BROWSER_VERSION}"
+# Install agent-browser and claude-code globally at pinned versions
+RUN npm install -g --no-audit --no-fund \
+    "agent-browser@${AGENT_BROWSER_VERSION}" \
+    "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
 
 # Create app directory
 WORKDIR /app
@@ -41,8 +45,8 @@ WORKDIR /app
 # Copy package files first for better caching
 COPY agent-runner/package*.json ./
 
-# Install dependencies from the lockfile only
-RUN npm ci
+# Install dependencies from the lockfile for reproducible builds
+RUN npm ci --no-audit --no-fund
 
 # Copy source code
 COPY agent-runner/ ./

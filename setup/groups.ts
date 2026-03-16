@@ -5,7 +5,9 @@
  * Replaces 05-sync-groups.sh + 05b-list-groups.sh
  */
 import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 import Database from 'better-sqlite3';
@@ -179,10 +181,11 @@ sock.ev.on('connection.update', async (update) => {
 });
 `;
 
-    const tmpScript = path.join(projectRoot, '.tmp-group-sync.mjs');
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nanoclaw-sync-'));
+    const tmpScript = path.join(tmpDir, 'group-sync.mjs');
     fs.writeFileSync(tmpScript, syncScript, 'utf-8');
     try {
-      const output = execSync(`node ${tmpScript}`, {
+      const output = execFileSync(process.execPath, [tmpScript], {
         cwd: projectRoot,
         encoding: 'utf-8',
         timeout: 45000,
@@ -191,7 +194,11 @@ sock.ev.on('connection.update', async (update) => {
       syncOk = output.includes('SYNCED:');
       logger.info({ output: output.trim() }, 'Sync output');
     } finally {
-      try { fs.unlinkSync(tmpScript); } catch { /* ignore cleanup errors */ }
+      try {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      } catch {
+        /* ignore cleanup errors */
+      }
     }
   } catch (err) {
     logger.error({ err }, 'Sync failed');

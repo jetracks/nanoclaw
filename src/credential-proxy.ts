@@ -53,6 +53,34 @@ function buildUpstreamPath(
   return `${pathname}${incomingUrl.search}`;
 }
 
+const MAX_PROXY_BODY_BYTES = 8 * 1024 * 1024;
+const PROXY_TIMEOUT_MS = 30_000;
+
+function isLoopbackHost(hostname: string): boolean {
+  return (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname === 'host.docker.internal'
+  );
+}
+
+function validateUpstreamUrl(url: URL): void {
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    throw new Error(`Unsupported OPENAI_BASE_URL protocol "${url.protocol}"`);
+  }
+
+  if (
+    url.protocol === 'http:' &&
+    !isLoopbackHost(url.hostname) &&
+    process.env.ALLOW_INSECURE_OPENAI_BASE_URL !== 'true'
+  ) {
+    throw new Error(
+      'Refusing to proxy secrets to a non-loopback HTTP OPENAI_BASE_URL. Use HTTPS or set ALLOW_INSECURE_OPENAI_BASE_URL=true to override.',
+    );
+  }
+}
+
 export function startCredentialProxy(
   port: number,
   host = '127.0.0.1',
@@ -73,6 +101,7 @@ export function startCredentialProxy(
   const upstreamUrl = new URL(
     secrets.OPENAI_BASE_URL || 'https://api.openai.com/v1',
   );
+  validateUpstreamUrl(upstreamUrl);
   const isHttps = upstreamUrl.protocol === 'https:';
   const makeRequest = isHttps ? httpsRequest : httpRequest;
 
@@ -86,8 +115,45 @@ export function startCredentialProxy(
         return;
       }
       const chunks: Buffer[] = [];
-      req.on('data', (c) => chunks.push(c));
+      let bodyBytes = 0;
+      let requestTooLarge = false;
+
+      req.setTimeout(PROXY_TIMEOUT_MS, () => {
+        req.destroy(new Error('Credential proxy request timeout'));
+      });
+
+      req.on('data', (c: Buffer) => {
+        bodyBytes += c.length;
+        if (bodyBytes > MAX_PROXY_BODY_BYTES) {
+          requestTooLarge = true;
+          chunks.length = 0;
+          req.removeAllListeners('data');
+          req.removeAllListeners('end');
+          if (!res.headersSent) {
+            res.writeHead(413);
+            res.end('Payload Too Large');
+          }
+          req.resume();
+          return;
+        }
+        chunks.push(c);
+      });
+      req.on('error', (err) => {
+        logger.warn({ err, url: req.url }, 'Credential proxy request error');
+        if (!res.headersSent) {
+          res.writeHead(requestTooLarge ? 413 : 400);
+          res.end(requestTooLarge ? 'Payload Too Large' : 'Bad Request');
+        }
+      });
       req.on('end', () => {
+        if (requestTooLarge) {
+          if (!res.headersSent) {
+            res.writeHead(413);
+            res.end('Payload Too Large');
+          }
+          return;
+        }
+
         const body = Buffer.concat(chunks);
         const headers: Record<string, string | number | string[] | undefined> =
           {
@@ -99,7 +165,12 @@ export function startCredentialProxy(
         // Strip hop-by-hop headers that must not be forwarded by proxies
         delete headers['connection'];
         delete headers['keep-alive'];
+        delete headers['proxy-authorization'];
+        delete headers['proxy-connection'];
+        delete headers['te'];
+        delete headers['trailer'];
         delete headers['transfer-encoding'];
+        delete headers['upgrade'];
         delete headers['authorization'];
         delete headers[CREDENTIAL_PROXY_AUTH_HEADER];
         headers['authorization'] = `Bearer ${secrets.OPENAI_API_KEY}`;
@@ -124,14 +195,23 @@ export function startCredentialProxy(
           },
         );
 
+        upstream.setTimeout(PROXY_TIMEOUT_MS, () => {
+          upstream.destroy(new Error('Credential proxy upstream timeout'));
+        });
+
         upstream.on('error', (err) => {
           logger.error(
             { err, url: req.url },
             'Credential proxy upstream error',
           );
           if (!res.headersSent) {
-            res.writeHead(502);
-            res.end('Bad Gateway');
+            const statusCode =
+              err instanceof Error &&
+              err.message === 'Credential proxy upstream timeout'
+                ? 504
+                : 502;
+            res.writeHead(statusCode);
+            res.end(statusCode === 504 ? 'Gateway Timeout' : 'Bad Gateway');
           }
         });
 

@@ -197,9 +197,6 @@ describe('credential-proxy', () => {
       '{}',
     );
 
-    // Proxy strips client hop-by-hop headers. Node's HTTP client may re-add
-    // its own Connection header (standard HTTP/1.1 behavior), but the client's
-    // custom keep-alive and transfer-encoding must not be forwarded.
     expect(lastUpstreamHeaders['keep-alive']).toBeUndefined();
     expect(lastUpstreamHeaders['transfer-encoding']).toBeUndefined();
   });
@@ -248,5 +245,36 @@ describe('credential-proxy', () => {
 
   it('requires OPENAI_API_KEY', async () => {
     await expect(startProxy({})).rejects.toThrow(/OPENAI_API_KEY is required/);
+  });
+
+  it('rejects oversized request bodies', async () => {
+    proxyPort = await startProxy({ OPENAI_API_KEY: 'sk-openai-real-key' });
+
+    const res = await makeRequest(
+      proxyPort,
+      {
+        method: 'POST',
+        path: '/responses',
+        headers: {
+          'content-type': 'application/json',
+          'x-nanoclaw-proxy-token': getCredentialProxyAuthToken(),
+        },
+      },
+      'x'.repeat(8 * 1024 * 1024 + 1),
+    );
+
+    expect(res.statusCode).toBe(413);
+    expect(res.body).toBe('Payload Too Large');
+  });
+
+  it('refuses non-loopback HTTP upstreams unless explicitly allowed', () => {
+    Object.assign(mockEnv, {
+      OPENAI_API_KEY: 'sk-openai-real-key',
+      OPENAI_BASE_URL: 'http://example.com/v1',
+    });
+
+    expect(() => startCredentialProxy(0)).toThrow(
+      'Refusing to proxy secrets to a non-loopback HTTP OPENAI_BASE_URL',
+    );
   });
 });

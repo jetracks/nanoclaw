@@ -3,7 +3,6 @@
  * Spawns agent execution in containers and handles IPC
  */
 import { ChildProcess, exec, spawn } from 'child_process';
-import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
@@ -37,8 +36,6 @@ import { OpenAISessionState, RegisteredGroup } from './types.js';
 // Sentinel markers for robust output parsing (must match agent-runner)
 const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
 const OUTPUT_END_MARKER = '---NANOCLAW_OUTPUT_END---';
-const PERSIST_AGENT_RUNNER_CUSTOMIZATIONS =
-  process.env.NANOCLAW_PERSIST_AGENT_RUNNER_SOURCE === 'true';
 
 export interface ContainerInput {
   prompt: string;
@@ -63,101 +60,87 @@ interface VolumeMount {
   readonly: boolean;
 }
 
-const AGENT_RUNNER_SYNC_METADATA = '.nanoclaw-sync.json';
+const MAIN_GROUP_SAFE_PROJECT_ENTRIES = [
+  '.env.example',
+  '.nvmrc',
+  '.prettierrc',
+  'CHANGELOG.md',
+  'CONTRIBUTING.md',
+  'CONTRIBUTORS.md',
+  'LICENSE',
+  'README.md',
+  'README_zh.md',
+  'assets',
+  'config-examples',
+  'container',
+  'docs',
+  'groups/global',
+  'launchd',
+  'package-lock.json',
+  'package.json',
+  'repo-tokens',
+  'scripts',
+  'setup',
+  'src',
+  'tsconfig.json',
+  'vitest.config.ts',
+  'vitest.skills.config.ts',
+] as const;
 
-function hashDirectory(dir: string): string {
-  const hash = crypto.createHash('sha256');
+const BUNDLED_PROJECT_INSTRUCTION_ENTRIES = [
+  '.claude',
+  '.mcp.json',
+  'CLAUDE.md',
+] as const;
+const ENABLE_BUNDLED_SKILLS =
+  process.env.NANOCLAW_ENABLE_BUNDLED_SKILLS === 'true';
 
-  const visit = (currentDir: string, relativeDir = ''): void => {
-    const entries = fs
-      .readdirSync(currentDir, { withFileTypes: true })
-      .filter((entry) => entry.name !== AGENT_RUNNER_SYNC_METADATA)
-      .sort((a, b) => a.name.localeCompare(b.name));
-
-    for (const entry of entries) {
-      const relativePath = path.join(relativeDir, entry.name);
-      hash.update(relativePath);
-      if (entry.isDirectory()) {
-        visit(path.join(currentDir, entry.name), relativePath);
-        continue;
-      }
-      hash.update(fs.readFileSync(path.join(currentDir, entry.name)));
-    }
-  };
-
-  visit(dir);
-  return hash.digest('hex');
+function isPathWithinBase(baseDir: string, candidate: string): boolean {
+  const relative = path.relative(baseDir, candidate);
+  return !relative.startsWith('..') && !path.isAbsolute(relative);
 }
 
-function syncAgentRunnerSource(
-  agentRunnerSrc: string,
-  groupAgentRunnerDir: string,
-  groupName: string,
-): void {
-  const metadataPath = path.join(
-    groupAgentRunnerDir,
-    AGENT_RUNNER_SYNC_METADATA,
-  );
-  const sourceHash = hashDirectory(agentRunnerSrc);
+function buildMainProjectReadonlyMounts(projectRoot: string): VolumeMount[] {
+  const resolvedProjectRoot = fs.realpathSync(projectRoot);
+  const mounts: VolumeMount[] = [];
+  const allowedEntries = ENABLE_BUNDLED_SKILLS
+    ? [
+        ...MAIN_GROUP_SAFE_PROJECT_ENTRIES,
+        ...BUNDLED_PROJECT_INSTRUCTION_ENTRIES,
+      ]
+    : MAIN_GROUP_SAFE_PROJECT_ENTRIES;
 
-  if (!fs.existsSync(groupAgentRunnerDir)) {
-    fs.cpSync(agentRunnerSrc, groupAgentRunnerDir, { recursive: true });
-    fs.writeFileSync(metadataPath, JSON.stringify({ sourceHash }, null, 2));
-    return;
-  }
+  for (const entry of allowedEntries) {
+    const hostPath = path.join(projectRoot, entry);
+    if (!fs.existsSync(hostPath)) continue;
 
-  let storedHash: string | undefined;
-  if (fs.existsSync(metadataPath)) {
+    let stat: fs.Stats;
     try {
-      storedHash = JSON.parse(
-        fs.readFileSync(metadataPath, 'utf-8'),
-      ).sourceHash;
+      stat = fs.lstatSync(hostPath);
     } catch {
-      storedHash = undefined;
+      continue;
     }
-  }
 
-  if (!storedHash) {
-    const backupDir = `${groupAgentRunnerDir}.backup-${Date.now()}`;
-    fs.renameSync(groupAgentRunnerDir, backupDir);
-    fs.cpSync(agentRunnerSrc, groupAgentRunnerDir, { recursive: true });
-    fs.writeFileSync(metadataPath, JSON.stringify({ sourceHash }, null, 2));
-    logger.warn(
-      { group: groupName, backupDir },
-      'Refreshed legacy per-group agent-runner source cache and preserved backup',
-    );
-    return;
-  }
+    // Refuse to mount repo-managed symlinks into the container.
+    if (stat.isSymbolicLink()) continue;
 
-  const currentGroupHash = hashDirectory(groupAgentRunnerDir);
-  if (currentGroupHash !== storedHash && PERSIST_AGENT_RUNNER_CUSTOMIZATIONS) {
-    logger.info(
-      { group: groupName },
-      'Preserving customized per-group agent-runner source cache',
-    );
-    return;
-  }
-
-  if (storedHash === sourceHash) {
-    if (currentGroupHash !== storedHash) {
-      fs.rmSync(groupAgentRunnerDir, { recursive: true, force: true });
-      fs.cpSync(agentRunnerSrc, groupAgentRunnerDir, { recursive: true });
-      fs.writeFileSync(metadataPath, JSON.stringify({ sourceHash }, null, 2));
-      logger.warn(
-        { group: groupName },
-        'Reset untrusted per-group agent-runner customization to trusted source',
-      );
+    let realHostPath: string;
+    try {
+      realHostPath = fs.realpathSync(hostPath);
+    } catch {
+      continue;
     }
-    return;
+
+    if (!isPathWithinBase(resolvedProjectRoot, realHostPath)) continue;
+
+    mounts.push({
+      hostPath: realHostPath,
+      containerPath: path.posix.join('/workspace/project', entry),
+      readonly: true,
+    });
   }
 
-  fs.rmSync(groupAgentRunnerDir, { recursive: true, force: true });
-  fs.cpSync(agentRunnerSrc, groupAgentRunnerDir, { recursive: true });
-  fs.writeFileSync(metadataPath, JSON.stringify({ sourceHash }, null, 2));
-  logger.info(
-    { group: groupName },
-    'Updated per-group agent-runner source cache',
-  );
+  return mounts;
 }
 
 function buildVolumeMounts(
@@ -169,27 +152,10 @@ function buildVolumeMounts(
   const groupDir = resolveGroupFolderPath(group.folder);
 
   if (isMain) {
-    // Main gets the project root read-only. Writable paths the agent needs
-    // (group folder, IPC, session state) are mounted separately below.
-    // Read-only prevents the agent from modifying host application code
-    // (src/, dist/, package.json, etc.) which would bypass the sandbox
-    // entirely on next restart.
-    mounts.push({
-      hostPath: projectRoot,
-      containerPath: '/workspace/project',
-      readonly: true,
-    });
-
-    // Shadow .env so the agent cannot read secrets from the mounted project root.
-    // Credentials are injected by the credential proxy, never exposed to containers.
-    const envFile = path.join(projectRoot, '.env');
-    if (fs.existsSync(envFile)) {
-      mounts.push({
-        hostPath: '/dev/null',
-        containerPath: '/workspace/project/.env',
-        readonly: true,
-      });
-    }
+    // Main sees a curated read-only view of static repo content, not the
+    // whole project root. This avoids leaking runtime state such as the DB,
+    // auth material, logs, and other writable host data into the container.
+    mounts.push(...buildMainProjectReadonlyMounts(projectRoot));
 
     // Main also gets its group folder as the working directory
     mounts.push({
@@ -273,30 +239,6 @@ function buildVolumeMounts(
       readonly: true,
     },
   );
-
-  // Copy agent-runner source into a per-group writable location so agents
-  // can customize it (add tools, change behavior) without affecting other
-  // groups. Recompiled on container startup via entrypoint.sh.
-  const agentRunnerSrc = path.join(
-    projectRoot,
-    'container',
-    'agent-runner',
-    'src',
-  );
-  const groupAgentRunnerDir = path.join(
-    DATA_DIR,
-    'sessions',
-    group.folder,
-    'agent-runner-src',
-  );
-  if (fs.existsSync(agentRunnerSrc)) {
-    syncAgentRunnerSource(agentRunnerSrc, groupAgentRunnerDir, group.name);
-  }
-  mounts.push({
-    hostPath: groupAgentRunnerDir,
-    containerPath: '/app/src',
-    readonly: false,
-  });
 
   // Additional mounts validated against external allowlist (tamper-proof from containers)
   if (group.containerConfig?.additionalMounts) {

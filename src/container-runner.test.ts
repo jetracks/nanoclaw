@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { EventEmitter } from 'events';
-import { PassThrough } from 'stream';
 import { spawn } from 'child_process';
+import { EventEmitter } from 'events';
 import fs from 'fs';
+import { PassThrough } from 'stream';
 
 // Sentinel markers must match container-runner.ts
 const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
@@ -44,6 +44,8 @@ vi.mock('fs', async () => {
       writeFileSync: vi.fn(),
       readFileSync: vi.fn(() => ''),
       readdirSync: vi.fn(() => []),
+      lstatSync: vi.fn(() => ({ isSymbolicLink: () => false })),
+      realpathSync: vi.fn((p: string) => p),
       statSync: vi.fn(() => ({ isDirectory: () => false })),
       copyFileSync: vi.fn(),
     },
@@ -123,9 +125,15 @@ describe('container-runner timeout behavior', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     fakeProc = createFakeProcess();
-    vi.mocked(fs.existsSync).mockReset();
-    vi.mocked(fs.existsSync).mockReturnValue(false);
     vi.mocked(spawn).mockClear();
+    vi.mocked(fs.existsSync).mockImplementation(() => false);
+    vi.mocked(fs.lstatSync).mockImplementation(
+      () =>
+        ({ isSymbolicLink: () => false }) as ReturnType<typeof fs.lstatSync>,
+    );
+    vi.mocked(fs.realpathSync).mockImplementation((p: fs.PathLike) =>
+      String(p),
+    );
   });
 
   afterEach(() => {
@@ -287,5 +295,77 @@ describe('container-runner timeout behavior', () => {
     expect(
       args.some((arg) => String(arg).startsWith('NANOCLAW_PROXY_TOKEN=')),
     ).toBe(true);
+  });
+
+  it('main group only mounts curated static project content read-only', async () => {
+    const mainGroup: RegisteredGroup = {
+      ...testGroup,
+      folder: 'main-group',
+      isMain: true,
+    };
+
+    vi.mocked(fs.existsSync).mockImplementation((p: fs.PathLike) => {
+      const value = String(p);
+      return (
+        value === '/Users/test/project' ||
+        value === '/Users/test/project/.claude' ||
+        value === '/Users/test/project/.mcp.json' ||
+        value === '/Users/test/project/CLAUDE.md' ||
+        value === '/Users/test/project/src' ||
+        value === '/Users/test/project/README.md' ||
+        value === '/Users/test/project/package.json'
+      );
+    });
+    vi.mocked(fs.realpathSync).mockImplementation((p: fs.PathLike) =>
+      String(p),
+    );
+
+    const originalCwd = process.cwd;
+    process.cwd = () => '/Users/test/project';
+
+    try {
+      const resultPromise = runContainerAgent(
+        mainGroup,
+        { ...testInput, groupFolder: 'main-group', isMain: true },
+        () => {},
+      );
+
+      emitOutputMarker(fakeProc, {
+        status: 'success',
+        result: 'Done',
+      });
+      fakeProc.emit('close', 0);
+
+      await resultPromise;
+
+      const containerArgs = vi.mocked(spawn).mock.calls[0]?.[1] as
+        | string[]
+        | undefined;
+      expect(containerArgs).toBeDefined();
+      expect(containerArgs).toContain(
+        '/Users/test/project/src:/workspace/project/src:ro',
+      );
+      expect(containerArgs).toContain(
+        '/Users/test/project/README.md:/workspace/project/README.md:ro',
+      );
+      expect(containerArgs).toContain(
+        '/Users/test/project/package.json:/workspace/project/package.json:ro',
+      );
+      expect(containerArgs).not.toContain(
+        '/Users/test/project:/workspace/project:ro',
+      );
+      expect(containerArgs).not.toContain(
+        '/Users/test/project/.claude:/workspace/project/.claude:ro',
+      );
+      expect(containerArgs).not.toContain(
+        '/Users/test/project/.mcp.json:/workspace/project/.mcp.json:ro',
+      );
+      expect(containerArgs).not.toContain(
+        '/Users/test/project/CLAUDE.md:/workspace/project/CLAUDE.md:ro',
+      );
+      expect(containerArgs).not.toContain('/app/src');
+    } finally {
+      process.cwd = originalCwd;
+    }
   });
 });

@@ -1,9 +1,10 @@
 /**
  * Cross-platform detection utilities for NanoClaw setup.
  */
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
+import path from 'path';
 
 export type Platform = 'macos' | 'linux' | 'unknown';
 export type ServiceManager = 'launchd' | 'systemd' | 'none';
@@ -57,23 +58,23 @@ export function openBrowser(url: string): boolean {
   try {
     const platform = getPlatform();
     if (platform === 'macos') {
-      execSync(`open ${JSON.stringify(url)}`, { stdio: 'ignore' });
+      execFileSync('open', [url], { stdio: 'ignore' });
       return true;
     }
     if (platform === 'linux') {
       // Try xdg-open first, then wslview for WSL
       if (commandExists('xdg-open')) {
-        execSync(`xdg-open ${JSON.stringify(url)}`, { stdio: 'ignore' });
+        execFileSync('xdg-open', [url], { stdio: 'ignore' });
         return true;
       }
       if (isWSL() && commandExists('wslview')) {
-        execSync(`wslview ${JSON.stringify(url)}`, { stdio: 'ignore' });
+        execFileSync('wslview', [url], { stdio: 'ignore' });
         return true;
       }
       // WSL without wslview: try cmd.exe
       if (isWSL()) {
         try {
-          execSync(`cmd.exe /c start "" ${JSON.stringify(url)}`, {
+          execFileSync('cmd.exe', ['/c', 'start', '', url], {
             stdio: 'ignore',
           });
           return true;
@@ -98,26 +99,37 @@ export function getServiceManager(): ServiceManager {
   return 'none';
 }
 
-export function getNodePath(): string {
-  try {
-    return execSync('command -v node', { encoding: 'utf-8' }).trim();
-  } catch {
-    return process.execPath;
+function findExecutable(name: string): string | null {
+  if (!name || name.includes(path.sep)) return null;
+
+  const pathEntries = (process.env.PATH || '').split(path.delimiter);
+  for (const entry of pathEntries) {
+    if (!entry) continue;
+    const candidate = path.join(entry, name);
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK);
+      return candidate;
+    } catch {
+      // not executable
+    }
   }
+
+  return null;
+}
+
+export function getNodePath(): string {
+  return findExecutable('node') || process.execPath;
 }
 
 export function commandExists(name: string): boolean {
-  try {
-    execSync(`command -v ${name}`, { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
+  return findExecutable(name) !== null;
 }
 
 export function getNodeVersion(): string | null {
   try {
-    const version = execSync('node --version', { encoding: 'utf-8' }).trim();
+    const version = execFileSync(getNodePath(), ['--version'], {
+      encoding: 'utf-8',
+    }).trim();
     return version.replace(/^v/, '');
   } catch {
     return null;

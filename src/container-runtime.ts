@@ -56,10 +56,11 @@ export const CONTAINER_HOST_GATEWAY = containerHostGateway();
 /**
  * Address the credential proxy binds to.
  * Docker Desktop (macOS): 127.0.0.1 — the VM routes host.docker.internal to loopback.
- * Docker (Linux): bind to the docker0 bridge IP so only containers can reach it,
- *   falling back to 0.0.0.0 if the interface isn't found.
+ * Docker (Linux): bind to the docker0 bridge IP so only containers can reach it.
  * Apple Container (macOS): prefer bridge100 when available, otherwise bind all
- *   interfaces so the VM can reach the proxy via 192.168.64.1.
+ * interfaces so the VM can reach the proxy via 192.168.64.1.
+ * If a safe Docker bind address cannot be determined, fail closed instead of
+ * exposing the secret-injecting proxy on 0.0.0.0.
  */
 export function resolveProxyBindHost(
   runtime: ContainerRuntime = CONTAINER_RUNTIME,
@@ -92,12 +93,16 @@ export function resolveProxyBindHost(
     const ipv4 = docker0.find((entry) => entry.family === 'IPv4');
     if (ipv4) return ipv4.address;
   }
-
-  return '0.0.0.0';
+  throw new Error(
+    'Unable to determine a safe credential proxy bind address. Set CREDENTIAL_PROXY_HOST explicitly instead of falling back to 0.0.0.0.',
+  );
 }
 
-export const PROXY_BIND_HOST =
-  process.env.CREDENTIAL_PROXY_HOST || resolveProxyBindHost();
+export function getProxyBindHost(): string {
+  return process.env.CREDENTIAL_PROXY_HOST || resolveProxyBindHost();
+}
+
+export const PROXY_BIND_HOST = getProxyBindHost();
 
 /** CLI args needed for the container to resolve the host gateway. */
 export function hostGatewayArgs(

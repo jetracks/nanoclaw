@@ -5,6 +5,7 @@
  * Fixes: Root→system systemd, WSL nohup fallback, no `|| true` swallowing errors.
  */
 import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -118,9 +119,7 @@ function setupLaunchd(
   logger.info({ plistPath }, 'Wrote launchd plist');
 
   try {
-    execSync(`launchctl load ${JSON.stringify(plistPath)}`, {
-      stdio: 'ignore',
-    });
+    execFileSync('launchctl', ['load', plistPath], { stdio: 'ignore' });
     logger.info('launchctl load succeeded');
   } catch {
     logger.warn('launchctl load failed (may already be loaded)');
@@ -167,7 +166,7 @@ function setupLinux(
  */
 function killOrphanedProcesses(projectRoot: string): void {
   try {
-    execSync(`pkill -f '${projectRoot}/dist/index\\.js' || true`, {
+    execFileSync('pkill', ['-f', `${projectRoot}/dist/index\\.js`], {
       stdio: 'ignore',
     });
     logger.info('Stopped any orphaned nanoclaw processes');
@@ -212,16 +211,18 @@ function setupSystemd(
 
   // Root uses system-level service, non-root uses user-level
   let unitPath: string;
-  let systemctlPrefix: string;
+  let systemctlArgs: string[];
 
   if (runningAsRoot) {
     unitPath = '/etc/systemd/system/nanoclaw.service';
-    systemctlPrefix = 'systemctl';
+    systemctlArgs = [];
     logger.info('Running as root — installing system-level systemd unit');
   } else {
     // Check if user-level systemd session is available
     try {
-      execSync('systemctl --user daemon-reload', { stdio: 'pipe' });
+      execFileSync('systemctl', ['--user', 'daemon-reload'], {
+        stdio: 'pipe',
+      });
     } catch {
       logger.warn(
         'systemd user session not available — falling back to nohup wrapper',
@@ -232,7 +233,7 @@ function setupSystemd(
     const unitDir = path.join(homeDir, '.config', 'systemd', 'user');
     fs.mkdirSync(unitDir, { recursive: true });
     unitPath = path.join(unitDir, 'nanoclaw.service');
-    systemctlPrefix = 'systemctl --user';
+    systemctlArgs = ['--user'];
   }
 
   const unit = `[Unit]
@@ -269,19 +270,25 @@ WantedBy=${runningAsRoot ? 'multi-user.target' : 'default.target'}`;
 
   // Enable and start
   try {
-    execSync(`${systemctlPrefix} daemon-reload`, { stdio: 'ignore' });
+    execFileSync('systemctl', [...systemctlArgs, 'daemon-reload'], {
+      stdio: 'ignore',
+    });
   } catch (err) {
     logger.error({ err }, 'systemctl daemon-reload failed');
   }
 
   try {
-    execSync(`${systemctlPrefix} enable nanoclaw`, { stdio: 'ignore' });
+    execFileSync('systemctl', [...systemctlArgs, 'enable', 'nanoclaw'], {
+      stdio: 'ignore',
+    });
   } catch (err) {
     logger.error({ err }, 'systemctl enable failed');
   }
 
   try {
-    execSync(`${systemctlPrefix} start nanoclaw`, { stdio: 'ignore' });
+    execFileSync('systemctl', [...systemctlArgs, 'start', 'nanoclaw'], {
+      stdio: 'ignore',
+    });
   } catch (err) {
     logger.error({ err }, 'systemctl start failed');
   }
@@ -289,7 +296,9 @@ WantedBy=${runningAsRoot ? 'multi-user.target' : 'default.target'}`;
   // Verify
   let serviceLoaded = false;
   try {
-    execSync(`${systemctlPrefix} is-active nanoclaw`, { stdio: 'ignore' });
+    execFileSync('systemctl', [...systemctlArgs, 'is-active', 'nanoclaw'], {
+      stdio: 'ignore',
+    });
     serviceLoaded = true;
   } catch {
     // Not active
