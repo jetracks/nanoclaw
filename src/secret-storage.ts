@@ -3,7 +3,11 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-const KEY_DIR = path.join(process.env.HOME || os.homedir(), '.config', 'nanoclaw');
+const KEY_DIR = path.join(
+  process.env.HOME || os.homedir(),
+  '.config',
+  'nanoclaw',
+);
 const KEY_PATH = path.join(KEY_DIR, 'secret-key.bin');
 const SECRET_PREFIX = 'enc:v1';
 
@@ -35,7 +39,9 @@ function loadMasterKey(): Buffer {
   return key;
 }
 
-export function encryptLocalSecret(value: string | null | undefined): string | null {
+export function encryptLocalSecret(
+  value: string | null | undefined,
+): string | null {
   if (value == null || value === '') return value ?? null;
   if (value.startsWith(`${SECRET_PREFIX}:`)) return value;
   const key = loadMasterKey();
@@ -54,7 +60,9 @@ export function encryptLocalSecret(value: string | null | undefined): string | n
   ].join(':');
 }
 
-export function decryptLocalSecret(value: string | null | undefined): string | null {
+export function decryptLocalSecret(
+  value: string | null | undefined,
+): string | null {
   if (value == null || value === '') return value ?? null;
   if (!value.startsWith(`${SECRET_PREFIX}:`)) return value;
   const parts = value.split(':');

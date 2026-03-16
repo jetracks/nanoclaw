@@ -10,7 +10,10 @@ function ensureWithinBase(baseDir: string, candidatePath: string): void {
   }
 }
 
-export function assertSafeIpcId(value: string, label = 'IPC identifier'): string {
+export function assertSafeIpcId(
+  value: string,
+  label = 'IPC identifier',
+): string {
   const normalized = value.trim();
   if (!SAFE_IPC_ID_PATTERN.test(normalized)) {
     throw new Error(`Invalid ${label}: ${value}`);
@@ -40,7 +43,10 @@ export function safeReadUtf8FileNoFollow(
   if (options?.requireSingleLink !== false && stats.nlink !== 1) {
     throw new Error(`Refusing to read linked file: ${filePath}`);
   }
-  const fd = fs.openSync(filePath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  const fd = fs.openSync(
+    filePath,
+    fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW,
+  );
   try {
     return fs.readFileSync(fd, 'utf-8');
   } finally {

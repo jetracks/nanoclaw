@@ -201,7 +201,10 @@ async function processPersonalOpsIpc(
     return;
   }
   if (data.type === 'get_snapshot' && data.requestId && data.snapshotName) {
-    const safeRequestId = assertSafeIpcId(data.requestId, 'personal ops request id');
+    const safeRequestId = assertSafeIpcId(
+      data.requestId,
+      'personal ops request id',
+    );
     const responsesDir = path.join(
       DATA_DIR,
       'ipc',
