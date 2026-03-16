@@ -275,8 +275,11 @@ export async function exchangeAuthCode(input: {
       expiresIn && !Number.isNaN(expiresIn)
         ? new Date(Date.now() + expiresIn * 1000).toISOString()
         : null,
-    scope:
-      parseScopeList(payload.scope, config.scopes, config.scopeSeparator || ' '),
+    scope: parseScopeList(
+      payload.scope,
+      config.scopes,
+      config.scopeSeparator || ' ',
+    ),
     raw: payload,
   };
 }
@@ -363,8 +366,11 @@ export async function refreshAccessToken(input: {
       expiresIn && !Number.isNaN(expiresIn)
         ? new Date(Date.now() + expiresIn * 1000).toISOString()
         : null,
-    scope:
-      parseScopeList(payload.scope, config.scopes, config.scopeSeparator || ' '),
+    scope: parseScopeList(
+      payload.scope,
+      config.scopes,
+      config.scopeSeparator || ' ',
+    ),
     raw: payload,
   };
 }

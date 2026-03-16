@@ -133,8 +133,16 @@ import {
 } from './providers.js';
 import { loadPersonalOpsSecrets } from './secrets.js';
 
-const CONNECTED_PROVIDERS: PersonalOpsProvider[] = ['google', 'microsoft', 'jira', 'slack'];
-const SYNC_INTERVAL_MS: Record<PersonalOpsProvider, Partial<Record<SourceRecord['kind'], number>>> = {
+const CONNECTED_PROVIDERS: PersonalOpsProvider[] = [
+  'google',
+  'microsoft',
+  'jira',
+  'slack',
+];
+const SYNC_INTERVAL_MS: Record<
+  PersonalOpsProvider,
+  Partial<Record<SourceRecord['kind'], number>>
+> = {
   google: { email: 5 * 60_000, calendar_event: 15 * 60_000 },
   microsoft: { email: 5 * 60_000, calendar_event: 15 * 60_000 },
   jira: { jira_issue: 10 * 60_000 },
@@ -255,7 +263,9 @@ function looksActionable(
   }
   if (
     (input?.directness === 'direct' || input?.directness === 'mentioned') &&
-    /\b(please|review|approve|confirm|reply|respond|send|update|let me know)\b/i.test(lower)
+    /\b(please|review|approve|confirm|reply|respond|send|update|let me know)\b/i.test(
+      lower,
+    )
   ) {
     return true;
   }
@@ -271,12 +281,23 @@ function looksActionable(
   return lower.includes('todo');
 }
 
-function clampPriority(priority: string | null | undefined): PersonalOpsPriority {
-  if (priority === 'low' || priority === 'medium' || priority === 'high' || priority === 'urgent') {
+function clampPriority(
+  priority: string | null | undefined,
+): PersonalOpsPriority {
+  if (
+    priority === 'low' ||
+    priority === 'medium' ||
+    priority === 'high' ||
+    priority === 'urgent'
+  ) {
     return priority;
   }
   const lower = (priority || '').toLowerCase();
-  if (lower.includes('highest') || lower.includes('urgent') || lower.includes('blocker')) {
+  if (
+    lower.includes('highest') ||
+    lower.includes('urgent') ||
+    lower.includes('blocker')
+  ) {
     return 'urgent';
   }
   if (lower.includes('high')) return 'high';
@@ -297,7 +318,9 @@ function latestIso(...values: Array<string | null | undefined>): string | null {
   return valid[0] || null;
 }
 
-function earliestFutureIso(...values: Array<string | null | undefined>): string | null {
+function earliestFutureIso(
+  ...values: Array<string | null | undefined>
+): string | null {
   const now = Date.now();
   const valid = values
     .filter((value): value is string => Boolean(value))
@@ -311,10 +334,16 @@ function earliestFutureIso(...values: Array<string | null | undefined>): string 
 
 function sourceNeedsAttention(source: SourceRecord): boolean {
   const attention = sourceAttention(source);
-  return attention.actionRequired || attention.operationalRisk || attention.reportWorthy;
+  return (
+    attention.actionRequired ||
+    attention.operationalRisk ||
+    attention.reportWorthy
+  );
 }
 
-function sourceWorkItemStatusOverride(source: SourceRecord): WorkItem['status'] | null {
+function sourceWorkItemStatusOverride(
+  source: SourceRecord,
+): WorkItem['status'] | null {
   const value = sourceMetadataString(source, 'workItemStatusOverride');
   if (
     value === 'open' ||
@@ -330,7 +359,9 @@ function sourceWorkItemStatusOverride(source: SourceRecord): WorkItem['status'] 
   return null;
 }
 
-function workItemStateFromStatus(status: WorkItem['status']): PersonalOpsOpenLoopState {
+function workItemStateFromStatus(
+  status: WorkItem['status'],
+): PersonalOpsOpenLoopState {
   if (status === 'done' || status === 'ignored') return 'closed';
   if (status === 'blocked') return 'blocked';
   if (status === 'waiting' || status === 'on_hold') return 'waiting';
@@ -358,11 +389,15 @@ function parseJsonPreference<T>(key: string, fallback: T): T {
   }
 }
 
-function extractIssueKeys(...values: Array<string | null | undefined>): string[] {
+function extractIssueKeys(
+  ...values: Array<string | null | undefined>
+): string[] {
   const keys = new Set<string>();
   for (const value of values) {
     if (!value) continue;
-    for (const match of value.toUpperCase().matchAll(/\b[A-Z][A-Z0-9]+-\d+\b/g)) {
+    for (const match of value
+      .toUpperCase()
+      .matchAll(/\b[A-Z][A-Z0-9]+-\d+\b/g)) {
       keys.add(match[0]);
     }
   }
@@ -410,8 +445,12 @@ function normalizeConnectionSettings(
   const jiraProjectKeys = normalizeList(settings.jiraProjectKeys)?.map((key) =>
     key.toUpperCase(),
   );
-  const slackIncludedChannelIds = normalizeList(settings.slackIncludedChannelIds);
-  const slackExcludedChannelIds = normalizeList(settings.slackExcludedChannelIds);
+  const slackIncludedChannelIds = normalizeList(
+    settings.slackIncludedChannelIds,
+  );
+  const slackExcludedChannelIds = normalizeList(
+    settings.slackExcludedChannelIds,
+  );
   if (googleCalendarIds) normalized.googleCalendarIds = googleCalendarIds;
   if (microsoftMailFolderIds) {
     normalized.microsoftMailFolderIds = microsoftMailFolderIds;
@@ -454,7 +493,9 @@ function extractDomains(values: string[]): string[] {
 }
 
 function extractExplicitDomains(value: string | null | undefined): string[] {
-  return extractEmails(value || '').map((email) => email.split('@')[1]).filter(Boolean) as string[];
+  return extractEmails(value || '')
+    .map((email) => email.split('@')[1])
+    .filter(Boolean) as string[];
 }
 
 const SHARED_ALIAS_LOCAL_PARTS = new Set([
@@ -508,7 +549,8 @@ function accountMailboxEmail(source: SourceRecord): string | null {
 
 function sourceSenderAddress(source: SourceRecord): string | null {
   const senderAddress =
-    sourceMetadataString(source, 'senderAddress') || sourceMetadataString(source, 'fromAddress');
+    sourceMetadataString(source, 'senderAddress') ||
+    sourceMetadataString(source, 'fromAddress');
   if (senderAddress) {
     return senderAddress.toLowerCase();
   }
@@ -542,8 +584,11 @@ function sourceExplicitRecipientEmails(source: SourceRecord): string[] {
   if (metadataRecipients.length) {
     return [...new Set(metadataRecipients)];
   }
-  const senderAddress = sourceMetadataString(source, 'fromAddress')?.toLowerCase() || null;
-  return sourceParticipantEmails(source).filter((email) => email !== senderAddress);
+  const senderAddress =
+    sourceMetadataString(source, 'fromAddress')?.toLowerCase() || null;
+  return sourceParticipantEmails(source).filter(
+    (email) => email !== senderAddress,
+  );
 }
 
 function normalizeIgnoredSubjectSignature(value: string): string {
@@ -557,7 +602,9 @@ function normalizeIgnoredSubjectSignature(value: string): string {
     .trim();
 }
 
-function preservedSourceMetadata(existing?: SourceRecord): Record<string, unknown> {
+function preservedSourceMetadata(
+  existing?: SourceRecord,
+): Record<string, unknown> {
   const metadata = existing?.metadata || {};
   const preserved: Record<string, unknown> = {};
   for (const key of [
@@ -574,7 +621,10 @@ function preservedSourceMetadata(existing?: SourceRecord): Record<string, unknow
 }
 
 function listSourceIgnoreRules(): SourceIgnoreRule[] {
-  return parseJsonPreference<SourceIgnoreRule[]>(SOURCE_IGNORE_RULES_PREFERENCE_KEY, []).filter(
+  return parseJsonPreference<SourceIgnoreRule[]>(
+    SOURCE_IGNORE_RULES_PREFERENCE_KEY,
+    [],
+  ).filter(
     (rule) =>
       Boolean(rule?.id) &&
       Boolean(rule?.provider) &&
@@ -589,7 +639,9 @@ function saveSourceIgnoreRules(rules: SourceIgnoreRule[]): void {
 
 function buildSourceIgnoreRule(source: SourceRecord): SourceIgnoreRule | null {
   if (source.kind !== 'email') return null;
-  const subjectSignature = normalizeIgnoredSubjectSignature(source.title || source.summary || '');
+  const subjectSignature = normalizeIgnoredSubjectSignature(
+    source.title || source.summary || '',
+  );
   const senderAddress = sourceSenderAddress(source);
   if (!subjectSignature) return null;
   return {
@@ -604,15 +656,25 @@ function buildSourceIgnoreRule(source: SourceRecord): SourceIgnoreRule | null {
   };
 }
 
-function sourceMatchesIgnoreRule(source: SourceRecord, rule: SourceIgnoreRule): boolean {
+function sourceMatchesIgnoreRule(
+  source: SourceRecord,
+  rule: SourceIgnoreRule,
+): boolean {
   if (rule.provider !== source.provider) return false;
   if ((rule.accountId || null) !== (source.accountId || null)) return false;
   if (rule.kind !== source.kind) return false;
-  if (rule.senderAddress && rule.senderAddress !== sourceSenderAddress(source)) return false;
-  return normalizeIgnoredSubjectSignature(source.title || source.summary || '') === rule.subjectSignature;
+  if (rule.senderAddress && rule.senderAddress !== sourceSenderAddress(source))
+    return false;
+  return (
+    normalizeIgnoredSubjectSignature(source.title || source.summary || '') ===
+    rule.subjectSignature
+  );
 }
 
-function applySourceIgnoreRule(source: SourceRecord, rule: SourceIgnoreRule): void {
+function applySourceIgnoreRule(
+  source: SourceRecord,
+  rule: SourceIgnoreRule,
+): void {
   const existingAttention = source.attention || sourceAttention(source);
   source.status = 'filtered';
   source.attention = {
@@ -639,7 +701,9 @@ function isSharedAliasLocalPart(localPart: string): boolean {
   );
 }
 
-function isSharedAliasMailboxTrafficWithoutAccountRecipient(source: SourceRecord): boolean {
+function isSharedAliasMailboxTrafficWithoutAccountRecipient(
+  source: SourceRecord,
+): boolean {
   if (source.kind !== 'email') return false;
   const accountEmail = accountMailboxEmail(source);
   if (!accountEmail) return false;
@@ -654,17 +718,21 @@ function isSharedAliasMailboxTrafficWithoutAccountRecipient(source: SourceRecord
   });
 }
 
-function isInternalDistributionTrafficWithoutAccountRecipient(source: SourceRecord): boolean {
+function isInternalDistributionTrafficWithoutAccountRecipient(
+  source: SourceRecord,
+): boolean {
   if (source.kind !== 'email') return false;
   const accountEmail = accountMailboxEmail(source);
   if (!accountEmail) return false;
   const recipientEmails = sourceExplicitRecipientEmails(source);
-  if (!recipientEmails.length || recipientEmails.includes(accountEmail)) return false;
+  if (!recipientEmails.length || recipientEmails.includes(accountEmail))
+    return false;
   const accountDomain = accountEmail.split('@')[1];
   if (!accountDomain) return false;
   return recipientEmails.some((email) => {
     const [localPart, domain] = email.split('@');
-    if (!localPart || domain !== accountDomain || email === accountEmail) return false;
+    if (!localPart || domain !== accountDomain || email === accountEmail)
+      return false;
     return isSharedAliasLocalPart(localPart) || recipientEmails.length > 1;
   });
 }
@@ -675,7 +743,8 @@ function emailDirectnessForAccount(
   if (source.kind !== 'email') return null;
   const accountEmail = accountMailboxEmail(source);
   if (!accountEmail) return null;
-  if (sourceExplicitToRecipientEmails(source).includes(accountEmail)) return 'direct';
+  if (sourceExplicitToRecipientEmails(source).includes(accountEmail))
+    return 'direct';
   if (
     sourceExplicitCcRecipientEmails(source).includes(accountEmail) ||
     sourceExplicitBccRecipientEmails(source).includes(accountEmail)
@@ -706,7 +775,8 @@ function repositoryAliases(repository: GitRepository): string[] {
   add(repository.name);
   add(path.basename(repository.localPath));
   if (repository.remoteUrl) {
-    const match = repository.remoteUrl.match(/\/([^/]+?)(?:\.git)?$/i) ||
+    const match =
+      repository.remoteUrl.match(/\/([^/]+?)(?:\.git)?$/i) ||
       repository.remoteUrl.match(/:([^/]+?)(?:\.git)?$/i);
     add(match?.[1]);
   }
@@ -730,7 +800,9 @@ function collectSourceSignals(source: SourceRecord): {
     ...source.participants,
     typeof metadata.channelLabel === 'string' ? metadata.channelLabel : '',
     typeof metadata.calendarLabel === 'string' ? metadata.calendarLabel : '',
-    typeof metadata.mailFolderLabel === 'string' ? metadata.mailFolderLabel : '',
+    typeof metadata.mailFolderLabel === 'string'
+      ? metadata.mailFolderLabel
+      : '',
     typeof metadata.projectKey === 'string' ? metadata.projectKey : '',
     typeof metadata.projectName === 'string' ? metadata.projectName : '',
   ].filter(Boolean);
@@ -752,7 +824,9 @@ function includesAlias(
   if (!trimmed) return false;
   if (trimmed.length >= 4 && haystack.includes(trimmed)) return true;
   const normalizedAlias = normalizeMatchText(trimmed);
-  return normalizedAlias.length >= 5 && normalizedHaystack.includes(normalizedAlias);
+  return (
+    normalizedAlias.length >= 5 && normalizedHaystack.includes(normalizedAlias)
+  );
 }
 
 function attributionConfidence(score: number): number {
@@ -792,7 +866,8 @@ function appendAttributionDiagnostic(
   diagnostic: PersonalOpsAttributionDiagnostic,
 ): void {
   const exists = diagnostics.some(
-    (entry) => entry.kind === diagnostic.kind && entry.detail === diagnostic.detail,
+    (entry) =>
+      entry.kind === diagnostic.kind && entry.detail === diagnostic.detail,
   );
   if (!exists) {
     diagnostics.push(diagnostic);
@@ -801,7 +876,11 @@ function appendAttributionDiagnostic(
 
 function workItemStatusFromSource(source: SourceRecord): WorkItem['status'] {
   const status = (source.status || '').toLowerCase();
-  if (status.includes('done') || status.includes('closed') || status.includes('resolved')) {
+  if (
+    status.includes('done') ||
+    status.includes('closed') ||
+    status.includes('resolved')
+  ) {
     return 'done';
   }
   if (status.includes('progress')) return 'in_progress';
@@ -833,20 +912,33 @@ function sourceMetadataBoolean(source: SourceRecord, key: string): boolean {
   return source.metadata?.[key] === true;
 }
 
-function sourceMetadataString(source: SourceRecord, key: string): string | null {
+function sourceMetadataString(
+  source: SourceRecord,
+  key: string,
+): string | null {
   const value = source.metadata?.[key];
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
-function sourceMetadataStringArray(source: SourceRecord, key: string): string[] {
+function sourceMetadataStringArray(
+  source: SourceRecord,
+  key: string,
+): string[] {
   const value = source.metadata?.[key];
   return Array.isArray(value)
-    ? value.filter((entry): entry is string => typeof entry === 'string' && Boolean(entry.trim()))
+    ? value.filter(
+        (entry): entry is string =>
+          typeof entry === 'string' && Boolean(entry.trim()),
+      )
     : [];
 }
 
 function isEmailAccountScopedLearningSource(source: SourceRecord): boolean {
-  return source.kind === 'email' && Boolean(source.accountId) && source.provider !== 'manual';
+  return (
+    source.kind === 'email' &&
+    Boolean(source.accountId) &&
+    source.provider !== 'manual'
+  );
 }
 
 function sourceIdentityValues(source: SourceRecord): string[] {
@@ -883,7 +975,9 @@ function accountScopedHintDedupeKey(input: {
   ].join('::');
 }
 
-function sourceAttention(source: SourceRecord): NonNullable<SourceRecord['attention']> {
+function sourceAttention(
+  source: SourceRecord,
+): NonNullable<SourceRecord['attention']> {
   const metadata = source.metadata || {};
   const attention =
     (source.attention as Record<string, unknown> | undefined) ||
@@ -915,7 +1009,8 @@ function sourceAttention(source: SourceRecord): NonNullable<SourceRecord['attent
     isInternalDistributionTrafficWithoutAccountRecipient(source);
   const text = `${source.title}\n${source.summary}\n${source.body}`;
   const executiveOperationalUpdate = looksExecutiveOperationalUpdate(text);
-  const severeExecutiveOperationalAlert = looksSevereExecutiveOperationalAlert(text);
+  const severeExecutiveOperationalAlert =
+    looksSevereExecutiveOperationalAlert(text);
   if (
     isGroupAssignmentWrapperNotification(source) &&
     metadata.mentionsSelf !== true &&
@@ -924,17 +1019,17 @@ function sourceAttention(source: SourceRecord): NonNullable<SourceRecord['attent
     directness = 'shared';
   }
   if (
-    (
-      sharedAliasWithoutAccountRecipient ||
+    (sharedAliasWithoutAccountRecipient ||
       helpdeskSupportWithoutAccountRecipient ||
-      internalDistributionWithoutAccountRecipient
-    ) &&
+      internalDistributionWithoutAccountRecipient) &&
     directness !== 'mentioned'
   ) {
     directness = 'shared';
   }
   const priority = clampPriority(
-    (typeof attention?.urgency === 'string' ? attention.urgency : source.priority) || 'medium',
+    (typeof attention?.urgency === 'string'
+      ? attention.urgency
+      : source.priority) || 'medium',
   );
   let awarenessOnly =
     typeof attention?.awarenessOnly === 'boolean'
@@ -942,7 +1037,8 @@ function sourceAttention(source: SourceRecord): NonNullable<SourceRecord['attent
       : metadata.modelActionRequired === false;
   const automated =
     source.kind === 'email' &&
-    (sourceMetadataBoolean(source, 'automatedSender') || participantLooksAutomated(source));
+    (sourceMetadataBoolean(source, 'automatedSender') ||
+      participantLooksAutomated(source));
   let actionRequired =
     typeof attention?.actionRequired === 'boolean'
       ? attention.actionRequired
@@ -962,7 +1058,9 @@ function sourceAttention(source: SourceRecord): NonNullable<SourceRecord['attent
   if (
     actionRequired &&
     !operationalRisk &&
-    /\bno action required\b/i.test(`${source.title}\n${source.summary}\n${source.body}`)
+    /\bno action required\b/i.test(
+      `${source.title}\n${source.summary}\n${source.body}`,
+    )
   ) {
     actionRequired = false;
     awarenessOnly = false;
@@ -1032,8 +1130,15 @@ function sourceAttention(source: SourceRecord): NonNullable<SourceRecord['attent
   let reportWorthy =
     typeof attention?.reportWorthy === 'boolean'
       ? attention.reportWorthy
-      : operationalRisk || actionRequired || priority === 'high' || priority === 'urgent';
-  if (sharedTrafficWithoutAccountRecipient && executiveOperationalUpdate && directness !== 'mentioned') {
+      : operationalRisk ||
+        actionRequired ||
+        priority === 'high' ||
+        priority === 'urgent';
+  if (
+    sharedTrafficWithoutAccountRecipient &&
+    executiveOperationalUpdate &&
+    directness !== 'mentioned'
+  ) {
     reportWorthy = true;
   }
   if (
@@ -1064,18 +1169,23 @@ function sourceAttention(source: SourceRecord): NonNullable<SourceRecord['attent
     reportWorthy = false;
   }
   let importanceReason =
-    (typeof attention?.importanceReason === 'string' && attention.importanceReason.trim()) ||
+    (typeof attention?.importanceReason === 'string' &&
+      attention.importanceReason.trim()) ||
     sourceMetadataString(source, 'modelImportanceReason') ||
     (isLikelyRoutineNotificationSource(source, { directness, automated })
       ? 'Routine notification'
       : operationalRisk
-      ? 'Operationally important'
-      : actionRequired
-        ? 'Likely needs Jerry action'
-        : awarenessOnly
-          ? 'Useful awareness'
-          : 'General triage signal');
-  if (sharedTrafficWithoutAccountRecipient && executiveOperationalUpdate && directness !== 'mentioned') {
+        ? 'Operationally important'
+        : actionRequired
+          ? 'Likely needs Jerry action'
+          : awarenessOnly
+            ? 'Useful awareness'
+            : 'General triage signal');
+  if (
+    sharedTrafficWithoutAccountRecipient &&
+    executiveOperationalUpdate &&
+    directness !== 'mentioned'
+  ) {
     importanceReason = severeExecutiveOperationalAlert
       ? 'Shared distribution or alias alert with executive operational impact'
       : 'Shared distribution or alias update relevant to Jerry’s role';
@@ -1096,7 +1206,8 @@ function sourceAttention(source: SourceRecord): NonNullable<SourceRecord['attent
     !operationalRisk &&
     directness !== 'mentioned'
   ) {
-    importanceReason = 'Internal distribution traffic without Jerry as a recipient';
+    importanceReason =
+      'Internal distribution traffic without Jerry as a recipient';
   }
   if (workStatusOverride === 'done' || workStatusOverride === 'ignored') {
     awarenessOnly = false;
@@ -1120,11 +1231,11 @@ function sourceAttention(source: SourceRecord): NonNullable<SourceRecord['attent
         ? attention.actionConfidence
         : typeof metadata.modelActionConfidence === 'number'
           ? (metadata.modelActionConfidence as number)
-          : source.attributionConfidence ?? null,
+          : (source.attributionConfidence ?? null),
     mappingConfidence:
       typeof attention?.mappingConfidence === 'number'
         ? attention.mappingConfidence
-        : source.attributionConfidence ?? null,
+        : (source.attributionConfidence ?? null),
     modelContextFingerprint:
       (typeof attention?.modelContextFingerprint === 'string' &&
         attention.modelContextFingerprint) ||
@@ -1136,7 +1247,11 @@ function sourceThreadState(source: SourceRecord): ThreadState {
   if (source.threadState) return source.threadState;
   const metadata = source.metadata || {};
   const existing = metadata.threadState as Record<string, unknown> | undefined;
-  if (existing && typeof existing.state === 'string' && typeof existing.summary === 'string') {
+  if (
+    existing &&
+    typeof existing.state === 'string' &&
+    typeof existing.summary === 'string'
+  ) {
     return {
       state: existing.state as ThreadState['state'],
       summary: existing.summary,
@@ -1194,7 +1309,10 @@ function sourceThreadState(source: SourceRecord): ThreadState {
       confidence: 0.7,
     };
   }
-  if (attention.operationalRisk || /\b(blocked|outage|website down|system down|incident)\b/i.test(text)) {
+  if (
+    attention.operationalRisk ||
+    /\b(blocked|outage|website down|system down|incident)\b/i.test(text)
+  ) {
     return {
       state: 'blocked',
       summary: 'This looks like a blocker or operational risk.',
@@ -1202,7 +1320,10 @@ function sourceThreadState(source: SourceRecord): ThreadState {
       confidence: 0.78,
     };
   }
-  if ((source.status || '').toLowerCase().includes('waiting') || /\bwaiting on\b/i.test(text)) {
+  if (
+    (source.status || '').toLowerCase().includes('waiting') ||
+    /\bwaiting on\b/i.test(text)
+  ) {
     return {
       state: 'waiting_for_response',
       summary: 'Waiting on an external response or next step.',
@@ -1210,7 +1331,10 @@ function sourceThreadState(source: SourceRecord): ThreadState {
       confidence: 0.68,
     };
   }
-  if (attention.actionRequired && (attention.directness === 'direct' || attention.directness === 'mentioned')) {
+  if (
+    attention.actionRequired &&
+    (attention.directness === 'direct' || attention.directness === 'mentioned')
+  ) {
     return {
       state: 'direct_ask',
       summary: 'Looks like a direct ask or mention that needs Jerry.',
@@ -1230,24 +1354,30 @@ function sourceThreadState(source: SourceRecord): ThreadState {
     state: 'awareness',
     summary: attention.importanceReason || 'Awareness item',
     lastActor: 'unknown',
-    confidence: attention.actionConfidence ?? attention.mappingConfidence ?? null,
+    confidence:
+      attention.actionConfidence ?? attention.mappingConfidence ?? null,
   };
 }
 
-function threadStateTone(state: ThreadState['state']): PersonalOpsOpenLoopState {
+function threadStateTone(
+  state: ThreadState['state'],
+): PersonalOpsOpenLoopState {
   if (state === 'blocked') return 'blocked';
-  if (state === 'waiting_for_response' || state === 'already_replied') return 'waiting';
+  if (state === 'waiting_for_response' || state === 'already_replied')
+    return 'waiting';
   if (state === 'resolved') return 'closed';
   if (state === 'awareness' || state === 'shared_alias') return 'awareness';
   return 'action';
 }
 
-function sourceReviewState(source: SourceRecord): PersonalOpsSuggestionStatus | null {
+function sourceReviewState(
+  source: SourceRecord,
+): PersonalOpsSuggestionStatus | null {
   if (source.reviewState) return source.reviewState;
   const metadata = source.metadata || {};
   return metadata.reviewState === 'suggested' ||
-      metadata.reviewState === 'accepted' ||
-      metadata.reviewState === 'rejected'
+    metadata.reviewState === 'accepted' ||
+    metadata.reviewState === 'rejected'
     ? (metadata.reviewState as PersonalOpsSuggestionStatus)
     : null;
 }
@@ -1331,10 +1461,14 @@ function looksRoutineNotificationText(text: string): boolean {
 
 function isOperationalGroupAssignmentWrapper(source: SourceRecord): boolean {
   if (!isGroupAssignmentWrapperNotification(source)) return false;
-  return looksOperationallySensitiveText(`${source.title}\n${source.summary}\n${source.body}`);
+  return looksOperationallySensitiveText(
+    `${source.title}\n${source.summary}\n${source.body}`,
+  );
 }
 
-function isHelpdeskSupportTrafficWithoutAccountRecipient(source: SourceRecord): boolean {
+function isHelpdeskSupportTrafficWithoutAccountRecipient(
+  source: SourceRecord,
+): boolean {
   if (source.kind !== 'email') return false;
   const accountEmail = accountMailboxEmail(source);
   if (!accountEmail) return false;
@@ -1350,7 +1484,11 @@ function isHelpdeskSupportTrafficWithoutAccountRecipient(source: SourceRecord): 
   const mentionsSupportAlias = participantEmails.some((email) => {
     const [localPart, domain] = email.split('@');
     if (!localPart || !domain) return false;
-    if (accountDomain && domain === accountDomain && ['support', 'help', 'service'].includes(localPart)) {
+    if (
+      accountDomain &&
+      domain === accountDomain &&
+      ['support', 'help', 'service'].includes(localPart)
+    ) {
       return true;
     }
     return /^(support|help|service)@/i.test(email);
@@ -1372,7 +1510,8 @@ function isLikelyRoutineNotificationSource(
   const automated =
     typeof input?.automated === 'boolean'
       ? input.automated
-      : sourceMetadataBoolean(source, 'automatedSender') || participantLooksAutomated(source);
+      : sourceMetadataBoolean(source, 'automatedSender') ||
+        participantLooksAutomated(source);
   if (!automated) return false;
   const text = `${source.title}\n${source.summary}\n${source.body}`;
   if (looksOperationallySensitiveText(text)) return false;
@@ -1381,19 +1520,27 @@ function isLikelyRoutineNotificationSource(
 
 function isLikelyNoiseEmail(source: SourceRecord): boolean {
   if (source.kind !== 'email') return false;
-  if (source.status === 'filtered' || sourceMetadataBoolean(source, 'likelyNoise')) {
+  if (
+    source.status === 'filtered' ||
+    sourceMetadataBoolean(source, 'likelyNoise')
+  ) {
     return true;
   }
   const automated =
-    sourceMetadataBoolean(source, 'automatedSender') || participantLooksAutomated(source);
+    sourceMetadataBoolean(source, 'automatedSender') ||
+    participantLooksAutomated(source);
   const text = `${source.title}\n${source.summary}\n${source.body}`;
   if (automated && looksOperationallySensitiveText(text)) {
     return false;
   }
-  return automated && (looksPromotional(text) || looksRoutineNotificationText(text));
+  return (
+    automated && (looksPromotional(text) || looksRoutineNotificationText(text))
+  );
 }
 
-function inboxPriorityRank(priority: PersonalOpsPriority | null | undefined): number {
+function inboxPriorityRank(
+  priority: PersonalOpsPriority | null | undefined,
+): number {
   switch (priority) {
     case 'urgent':
       return 4;
@@ -1440,7 +1587,8 @@ function normalizeSourceForView(source: SourceRecord): SourceRecord {
     threadState: sourceThreadState(source),
     reviewState: sourceReviewState(source),
     linkedContactIds:
-      source.linkedContactIds || sourceMetadataStringArray(source, 'linkedContactIds'),
+      source.linkedContactIds ||
+      sourceMetadataStringArray(source, 'linkedContactIds'),
   };
 }
 
@@ -1492,19 +1640,27 @@ function inspectGitRepository(inputPath: string): {
   let lastCommitAt: string | null = null;
 
   try {
-    repoRoot = execFileSync('git', ['-C', resolved, 'rev-parse', '--show-toplevel'], {
-      encoding: 'utf-8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
+    repoRoot = execFileSync(
+      'git',
+      ['-C', resolved, 'rev-parse', '--show-toplevel'],
+      {
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      },
+    ).trim();
   } catch {
     repoRoot = resolved;
   }
 
   try {
-    const branch = execFileSync('git', ['-C', repoRoot, 'symbolic-ref', '--short', 'HEAD'], {
-      encoding: 'utf-8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
+    const branch = execFileSync(
+      'git',
+      ['-C', repoRoot, 'symbolic-ref', '--short', 'HEAD'],
+      {
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      },
+    ).trim();
     defaultBranch = branch && branch !== 'HEAD' ? branch : null;
   } catch {
     defaultBranch = null;
@@ -1589,7 +1745,8 @@ export class PersonalOpsService {
 
     for (const provider of CONNECTED_PROVIDERS) {
       const providerAccounts = accounts.filter(
-        (entry) => entry.provider === provider && entry.status !== 'disconnected',
+        (entry) =>
+          entry.provider === provider && entry.status !== 'disconnected',
       );
       if (providerAccounts.length === 0) {
         summaries.push({
@@ -1616,7 +1773,9 @@ export class PersonalOpsService {
       for (const account of providerAccounts) {
         summaries.push({
           ...account,
-          syncJobs: jobs.filter((job) => job.connectionKey === account.connectionKey),
+          syncJobs: jobs.filter(
+            (job) => job.connectionKey === account.connectionKey,
+          ),
         });
       }
     }
@@ -1692,7 +1851,9 @@ export class PersonalOpsService {
   ): ConnectedAccount {
     const account = getConnectedAccountRecord(input.provider, input.accountId);
     if (!account) {
-      throw new Error(`${input.provider} (${input.accountId}) is not connected.`);
+      throw new Error(
+        `${input.provider} (${input.accountId}) is not connected.`,
+      );
     }
     upsertConnectedAccount({
       provider: input.provider,
@@ -1746,7 +1907,9 @@ export class PersonalOpsService {
   ): Promise<ConnectedAccountRecord> {
     const account = getConnectedAccountRecord(input.provider, input.accountId);
     if (!account || !account.accessToken) {
-      throw new Error(`${input.provider} (${input.accountId}) is not connected.`);
+      throw new Error(
+        `${input.provider} (${input.accountId}) is not connected.`,
+      );
     }
     if (!account.expiresAt) {
       return account;
@@ -1783,7 +1946,9 @@ export class PersonalOpsService {
     this.ensureSyncJobs(input);
     const account = await this.ensureFreshToken(input);
     const connectionKey = getConnectionKey(input.provider, input.accountId);
-    const sourceKinds = Object.keys(SYNC_INTERVAL_MS[input.provider]) as SourceRecord['kind'][];
+    const sourceKinds = Object.keys(
+      SYNC_INTERVAL_MS[input.provider],
+    ) as SourceRecord['kind'][];
     const primaryJob = getSyncJob(connectionKey, sourceKinds[0]);
     const since = chooseSourceWindow(primaryJob);
 
@@ -1838,12 +2003,16 @@ export class PersonalOpsService {
           ...(attributed.metadata || {}),
           ...preservedSourceMetadata(existing),
         };
-        const classificationFingerprint = buildClassificationFingerprint(attributed);
+        const classificationFingerprint =
+          buildClassificationFingerprint(attributed);
 
         if (existing?.attributionSource === 'manual') {
-          attributed.clientId = existing.clientId || attributed.clientId || null;
-          attributed.projectId = existing.projectId || attributed.projectId || null;
-          attributed.priority = attributed.priority || existing.priority || null;
+          attributed.clientId =
+            existing.clientId || attributed.clientId || null;
+          attributed.projectId =
+            existing.projectId || attributed.projectId || null;
+          attributed.priority =
+            attributed.priority || existing.priority || null;
           attributed.attributionSource = 'manual';
           attributed.attributionConfidence = 1;
           attributed.metadata = {
@@ -1897,26 +2066,33 @@ export class PersonalOpsService {
           existing &&
           existingFingerprint === classificationFingerprint &&
           (existing.attributionSource !== 'model' ||
-            existingModelContextFingerprint === classificationContext.fingerprint) &&
+            existingModelContextFingerprint ===
+              classificationContext.fingerprint) &&
           existing.attributionSource &&
           existing.attributionSource !== 'none' &&
           (existing.clientId || existing.projectId);
         const canReuseExistingModelTriage =
           existing &&
           existingFingerprint === classificationFingerprint &&
-          existingModelContextFingerprint === classificationContext.fingerprint &&
+          existingModelContextFingerprint ===
+            classificationContext.fingerprint &&
           this.hasStoredModelTriage(existing);
 
         if (
           canReuseExistingClassification &&
           (!attributed.clientId || !attributed.projectId)
         ) {
-          attributed.clientId = attributed.clientId || existing.clientId || null;
-          attributed.projectId = attributed.projectId || existing.projectId || null;
-          attributed.priority = attributed.priority || existing.priority || null;
+          attributed.clientId =
+            attributed.clientId || existing.clientId || null;
+          attributed.projectId =
+            attributed.projectId || existing.projectId || null;
+          attributed.priority =
+            attributed.priority || existing.priority || null;
           attributed.attributionSource = existing.attributionSource;
           attributed.attributionConfidence =
-            existing.attributionConfidence ?? attributed.attributionConfidence ?? null;
+            existing.attributionConfidence ??
+            attributed.attributionConfidence ??
+            null;
           if (
             !attributed.metadata?.attributionRule &&
             typeof existing.metadata?.attributionRule === 'string'
@@ -1969,11 +2145,14 @@ export class PersonalOpsService {
           if (suggestion) {
             if (!attributed.clientId && suggestion.clientName) {
               attributed.clientId =
-                clients.find((client) => client.name === suggestion.clientName)?.id || null;
+                clients.find((client) => client.name === suggestion.clientName)
+                  ?.id || null;
             }
             if (!attributed.projectId && suggestion.projectName) {
               attributed.projectId =
-                projects.find((project) => project.name === suggestion.projectName)?.id || null;
+                projects.find(
+                  (project) => project.name === suggestion.projectName,
+                )?.id || null;
             }
             if (!attributed.priority && suggestion.urgency) {
               attributed.priority = suggestion.urgency;
@@ -2008,7 +2187,7 @@ export class PersonalOpsService {
               actionConfidence:
                 typeof suggestion.actionConfidence === 'number'
                   ? suggestion.actionConfidence
-                  : suggestion.confidence ?? null,
+                  : (suggestion.confidence ?? null),
               mappingConfidence,
               modelContextFingerprint: classificationContext.fingerprint,
             } as const;
@@ -2030,7 +2209,9 @@ export class PersonalOpsService {
               ...(suggestion.followUpTitle
                 ? { modelFollowUpTitle: suggestion.followUpTitle }
                 : {}),
-              ...(suggestion.urgency ? { modelUrgency: suggestion.urgency } : {}),
+              ...(suggestion.urgency
+                ? { modelUrgency: suggestion.urgency }
+                : {}),
               ...(suggestion.importanceReason
                 ? { modelImportanceReason: suggestion.importanceReason }
                 : {}),
@@ -2046,12 +2227,18 @@ export class PersonalOpsService {
             };
             attributed.attention = nextAttention;
             attributed.reviewState =
-              attributed.metadata.reviewState === 'suggested' ? 'suggested' : null;
+              attributed.metadata.reviewState === 'suggested'
+                ? 'suggested'
+                : null;
             attributed.attributionSource =
-              needsModelAttribution && (attributed.clientId || attributed.projectId)
+              needsModelAttribution &&
+              (attributed.clientId || attributed.projectId)
                 ? 'model'
                 : attributed.attributionSource;
-            if (needsModelAttribution && (attributed.clientId || attributed.projectId)) {
+            if (
+              needsModelAttribution &&
+              (attributed.clientId || attributed.projectId)
+            ) {
               attributed.attributionConfidence = mappingConfidence ?? 0.65;
             }
           }
@@ -2148,10 +2335,13 @@ export class PersonalOpsService {
   async syncDueProviders(): Promise<void> {
     const now = Date.now();
     for (const connection of this.listConnections()) {
-      if (connection.status === 'disconnected' || !connection.accountId) continue;
+      if (connection.status === 'disconnected' || !connection.accountId)
+        continue;
       const shouldRun = connection.syncJobs.some((job) => {
         const nextRun = job.nextRunAt ? new Date(job.nextRunAt).getTime() : 0;
-        const backoff = job.backoffUntil ? new Date(job.backoffUntil).getTime() : 0;
+        const backoff = job.backoffUntil
+          ? new Date(job.backoffUntil).getTime()
+          : 0;
         return nextRun <= now && backoff <= now && job.status !== 'running';
       });
       if (shouldRun) {
@@ -2162,7 +2352,11 @@ export class PersonalOpsService {
           });
         } catch (err) {
           logger.warn(
-            { provider: connection.provider, accountId: connection.accountId, err },
+            {
+              provider: connection.provider,
+              accountId: connection.accountId,
+              err,
+            },
             'Personal ops provider sync failed',
           );
         }
@@ -2231,13 +2425,20 @@ export class PersonalOpsService {
     );
   }
 
-  private buildCommitReference(repository: GitRepository, commitSha: string): string | null {
+  private buildCommitReference(
+    repository: GitRepository,
+    commitSha: string,
+  ): string | null {
     if (repository.remoteUrl) {
-      const githubSsh = repository.remoteUrl.match(/^git@github\.com:(.+?)(?:\.git)?$/i);
+      const githubSsh = repository.remoteUrl.match(
+        /^git@github\.com:(.+?)(?:\.git)?$/i,
+      );
       if (githubSsh?.[1]) {
         return `https://github.com/${githubSsh[1]}/commit/${commitSha}`;
       }
-      const githubHttps = repository.remoteUrl.match(/^https:\/\/github\.com\/(.+?)(?:\.git)?$/i);
+      const githubHttps = repository.remoteUrl.match(
+        /^https:\/\/github\.com\/(.+?)(?:\.git)?$/i,
+      );
       if (githubHttps?.[1]) {
         return `https://github.com/${githubHttps[1]}/commit/${commitSha}`;
       }
@@ -2278,9 +2479,16 @@ export class PersonalOpsService {
 
       for (const line of logOutput.split('\n')) {
         if (!line.trim()) continue;
-        const [commitSha, committedAt, authorName, authorEmail, subject] = line.split('\x1f');
+        const [commitSha, committedAt, authorName, authorEmail, subject] =
+          line.split('\x1f');
         if (!commitSha || !committedAt || !subject) continue;
-        if (!this.shouldIncludeCommit(authorName || '', authorEmail || '', identities)) {
+        if (
+          !this.shouldIncludeCommit(
+            authorName || '',
+            authorEmail || '',
+            identities,
+          )
+        ) {
           continue;
         }
         addActivity({
@@ -2369,10 +2577,13 @@ export class PersonalOpsService {
           ? value.workHoursEnd
           : DEFAULT_OPERATOR_PROFILE.workHoursEnd,
       reportingPreferences:
-        value.reportingPreferences || DEFAULT_OPERATOR_PROFILE.reportingPreferences,
+        value.reportingPreferences ||
+        DEFAULT_OPERATOR_PROFILE.reportingPreferences,
       escalationPreferences:
-        value.escalationPreferences || DEFAULT_OPERATOR_PROFILE.escalationPreferences,
-      assistantStyle: value.assistantStyle || DEFAULT_OPERATOR_PROFILE.assistantStyle,
+        value.escalationPreferences ||
+        DEFAULT_OPERATOR_PROFILE.escalationPreferences,
+      assistantStyle:
+        value.assistantStyle || DEFAULT_OPERATOR_PROFILE.assistantStyle,
       updatedAt:
         getPreference(OPERATOR_PROFILE_PREFERENCE_KEY)?.updatedAt ||
         operatorProfileFallback().updatedAt,
@@ -2409,7 +2620,11 @@ export class PersonalOpsService {
     const contactsById = new Map<string, Contact>();
     for (const participant of source.participants) {
       for (const email of extractEmails(participant)) {
-        const identity = findContactIdentity('email', source.provider, normalizeIdentityValue(email));
+        const identity = findContactIdentity(
+          'email',
+          source.provider,
+          normalizeIdentityValue(email),
+        );
         if (identity) {
           const contact = getContact(identity.contactId);
           if (contact) contactsById.set(contact.id, contact);
@@ -2427,7 +2642,9 @@ export class PersonalOpsService {
     return [...contactsById.values()];
   }
 
-  private getAccountScopedHintsForSource(source: SourceRecord): AccountScopedContactHint[] {
+  private getAccountScopedHintsForSource(
+    source: SourceRecord,
+  ): AccountScopedContactHint[] {
     if (!source.accountId || source.provider === 'manual') {
       return [];
     }
@@ -2443,7 +2660,9 @@ export class PersonalOpsService {
       (hint) =>
         hint.status !== 'rejected' &&
         (identities.has(hint.identityValue) ||
-          this.resolveContactsForSource(source).some((contact) => contact.id === hint.contactId)),
+          this.resolveContactsForSource(source).some(
+            (contact) => contact.id === hint.contactId,
+          )),
     );
   }
 
@@ -2472,9 +2691,14 @@ export class PersonalOpsService {
     );
   }
 
-  private inferContactImportance(source: SourceRecord): PersonalOpsContactImportance {
+  private inferContactImportance(
+    source: SourceRecord,
+  ): PersonalOpsContactImportance {
     const attention = sourceAttention(source);
-    if (attention.operationalRisk || clampPriority(source.priority) === 'urgent') {
+    if (
+      attention.operationalRisk ||
+      clampPriority(source.priority) === 'urgent'
+    ) {
       return 'critical';
     }
     if (attention.actionRequired || clampPriority(source.priority) === 'high') {
@@ -2494,7 +2718,10 @@ export class PersonalOpsService {
   }
 
   private ensureContactsFromSource(source: SourceRecord): string[] {
-    const linkedIds = new Set<string>(source.linkedContactIds || sourceMetadataStringArray(source, 'linkedContactIds'));
+    const linkedIds = new Set<string>(
+      source.linkedContactIds ||
+        sourceMetadataStringArray(source, 'linkedContactIds'),
+    );
     const accountScopedLearning = isEmailAccountScopedLearningSource(source);
     for (const participant of source.participants) {
       const emailMatches = extractEmails(participant);
@@ -2504,7 +2731,11 @@ export class PersonalOpsService {
       let contact: Contact | null = null;
 
       for (const email of emailMatches) {
-        const identity = findContactIdentity('email', source.provider, normalizeIdentityValue(email));
+        const identity = findContactIdentity(
+          'email',
+          source.provider,
+          normalizeIdentityValue(email),
+        );
         if (identity) {
           contact = getContact(identity.contactId) || null;
           break;
@@ -2522,8 +2753,12 @@ export class PersonalOpsService {
           organizationHint: extractDomains([participant])[0] || null,
           importance: this.inferContactImportance(source),
           lastSeenAt: source.occurredAt,
-          defaultClientId: accountScopedLearning ? null : source.clientId ?? null,
-          defaultProjectId: accountScopedLearning ? null : source.projectId ?? null,
+          defaultClientId: accountScopedLearning
+            ? null
+            : (source.clientId ?? null),
+          defaultProjectId: accountScopedLearning
+            ? null
+            : (source.projectId ?? null),
           sourceCount: 1,
         });
       } else {
@@ -2533,15 +2768,18 @@ export class PersonalOpsService {
           organizationHint: contact.organizationHint,
           likelyRole: contact.likelyRole,
           importance:
-            contact.importance === 'critical' || this.inferContactImportance(source) === 'critical'
+            contact.importance === 'critical' ||
+            this.inferContactImportance(source) === 'critical'
               ? 'critical'
               : contact.importance,
           notes: contact.notes,
           lastSeenAt: latestIso(contact.lastSeenAt, source.occurredAt),
-          defaultClientId:
-            accountScopedLearning ? contact.defaultClientId : contact.defaultClientId || source.clientId || null,
-          defaultProjectId:
-            accountScopedLearning ? contact.defaultProjectId : contact.defaultProjectId || source.projectId || null,
+          defaultClientId: accountScopedLearning
+            ? contact.defaultClientId
+            : contact.defaultClientId || source.clientId || null,
+          defaultProjectId: accountScopedLearning
+            ? contact.defaultProjectId
+            : contact.defaultProjectId || source.projectId || null,
           sourceCount: contact.sourceCount + 1,
         });
       }
@@ -2662,14 +2900,19 @@ export class PersonalOpsService {
     hasTriageGuidance: boolean;
   } {
     const operator = this.getOperatorProfile();
-    const clientsById = new Map(input.clients.map((client) => [client.id, client]));
+    const clientsById = new Map(
+      input.clients.map((client) => [client.id, client]),
+    );
     const primaryClientId =
       input.source.clientId || input.settings.defaultClientId || null;
     const primaryProjectId =
       input.source.projectId || input.settings.defaultProjectId || null;
-    const primaryClient = primaryClientId ? clientsById.get(primaryClientId) || null : null;
+    const primaryClient = primaryClientId
+      ? clientsById.get(primaryClientId) || null
+      : null;
     const defaultProject = primaryProjectId
-      ? input.projects.find((project) => project.id === primaryProjectId) || null
+      ? input.projects.find((project) => project.id === primaryProjectId) ||
+        null
       : null;
     const clientProfiles = [...input.clients]
       .sort((left, right) => {
@@ -2699,14 +2942,19 @@ export class PersonalOpsService {
       .slice(0, 20)
       .map((project) => ({
         name: project.name,
-        clientName: project.clientId ? clientsById.get(project.clientId)?.name || null : null,
+        clientName: project.clientId
+          ? clientsById.get(project.clientId)?.name || null
+          : null,
         tags: project.tags,
         notes: this.compactClassificationText(project.notes, 180),
       }));
     const linkedContacts = this.resolveContactsForSource(input.source)
       .slice(0, 10)
       .map((contact) => {
-        const scopedHint = this.bestAccountScopedHintForContact(input.source, contact.id);
+        const scopedHint = this.bestAccountScopedHintForContact(
+          input.source,
+          contact.id,
+        );
         return {
           name: contact.name,
           organizationHint: contact.organizationHint,
@@ -2720,18 +2968,33 @@ export class PersonalOpsService {
               ? clientsById.get(contact.defaultClientId)?.name || null
               : null,
           defaultProjectName: scopedHint?.projectId
-            ? input.projects.find((project) => project.id === scopedHint.projectId)?.name || null
+            ? input.projects.find(
+                (project) => project.id === scopedHint.projectId,
+              )?.name || null
             : contact.defaultProjectId
-              ? input.projects.find((project) => project.id === contact.defaultProjectId)?.name || null
+              ? input.projects.find(
+                  (project) => project.id === contact.defaultProjectId,
+                )?.name || null
               : null,
-          matchedIdentities: listContactIdentities(contact.id).slice(0, 4).map((identity) => identity.value),
+          matchedIdentities: listContactIdentities(contact.id)
+            .slice(0, 4)
+            .map((identity) => identity.value),
         };
       });
     const operatorContext: SourceClassificationOperatorContext = {
       roleSummary: this.compactClassificationText(operator.roleSummary, 240),
-      reportingPreferences: this.compactClassificationText(operator.reportingPreferences, 220),
-      escalationPreferences: this.compactClassificationText(operator.escalationPreferences, 220),
-      assistantStyle: this.compactClassificationText(operator.assistantStyle, 180),
+      reportingPreferences: this.compactClassificationText(
+        operator.reportingPreferences,
+        220,
+      ),
+      escalationPreferences: this.compactClassificationText(
+        operator.escalationPreferences,
+        220,
+      ),
+      assistantStyle: this.compactClassificationText(
+        operator.assistantStyle,
+        180,
+      ),
       workHoursStart: operator.workHoursStart,
       workHoursEnd: operator.workHoursEnd,
     };
@@ -2763,14 +3026,16 @@ export class PersonalOpsService {
       hasTriageGuidance: Boolean(
         operator.roleSummary ||
         connectionContext.triageGuidance ||
-          primaryClient?.roles.length ||
-          primaryClient?.notes ||
-          primaryClient?.communicationPreferences,
+        primaryClient?.roles.length ||
+        primaryClient?.notes ||
+        primaryClient?.communicationPreferences,
       ),
     };
   }
 
-  private hasStoredModelTriage(source: SourceRecord | undefined | null): boolean {
+  private hasStoredModelTriage(
+    source: SourceRecord | undefined | null,
+  ): boolean {
     if (!source) return false;
     return (
       typeof source.metadata?.modelActionRequired === 'boolean' ||
@@ -2780,7 +3045,10 @@ export class PersonalOpsService {
     );
   }
 
-  private copyStoredModelTriage(target: SourceRecord, source: SourceRecord): void {
+  private copyStoredModelTriage(
+    target: SourceRecord,
+    source: SourceRecord,
+  ): void {
     const nextMetadata = { ...(target.metadata || {}) };
     for (const key of [
       'modelActionRequired',
@@ -2789,7 +3057,10 @@ export class PersonalOpsService {
       'modelUrgency',
       'modelContextFingerprint',
     ] as const) {
-      if (source.metadata?.[key] !== undefined && nextMetadata[key] === undefined) {
+      if (
+        source.metadata?.[key] !== undefined &&
+        nextMetadata[key] === undefined
+      ) {
         nextMetadata[key] = source.metadata[key];
       }
     }
@@ -2948,7 +3219,13 @@ export class PersonalOpsService {
         : '';
 
     for (const project of projects) {
-      if (includesAlias(signals.haystack, signals.normalizedHaystack, project.name)) {
+      if (
+        includesAlias(
+          signals.haystack,
+          signals.normalizedHaystack,
+          project.name,
+        )
+      ) {
         addProjectScore(
           project.id,
           8,
@@ -2992,7 +3269,9 @@ export class PersonalOpsService {
     }
 
     for (const client of clients) {
-      if (includesAlias(signals.haystack, signals.normalizedHaystack, client.name)) {
+      if (
+        includesAlias(signals.haystack, signals.normalizedHaystack, client.name)
+      ) {
         addClientScore(
           client.id,
           7,
@@ -3000,9 +3279,15 @@ export class PersonalOpsService {
           createAttributionDiagnostic('client_match', client.name),
         );
       }
-      const explicitDomains = extractExplicitDomains(client.communicationPreferences);
+      const explicitDomains = extractExplicitDomains(
+        client.communicationPreferences,
+      );
       for (const domain of explicitDomains) {
-        if (signals.domains.some((entry) => entry === domain || entry.endsWith(`.${domain}`))) {
+        if (
+          signals.domains.some(
+            (entry) => entry === domain || entry.endsWith(`.${domain}`),
+          )
+        ) {
           addClientScore(
             client.id,
             12,
@@ -3044,7 +3329,11 @@ export class PersonalOpsService {
 
     for (const repository of repositories) {
       const aliases = repositoryAliases(repository);
-      if (aliases.some((alias) => includesAlias(signals.haystack, signals.normalizedHaystack, alias))) {
+      if (
+        aliases.some((alias) =>
+          includesAlias(signals.haystack, signals.normalizedHaystack, alias),
+        )
+      ) {
         if (repository.projectId) {
           addProjectScore(
             repository.projectId,
@@ -3067,7 +3356,8 @@ export class PersonalOpsService {
     for (const [clientId, result] of [...clientScores.entries()]) {
       if (result.score < 11) continue;
       const eligibleProjects = (projectsByClient.get(clientId) || []).filter(
-        (project) => project.status !== 'archived' && project.status !== 'on_hold',
+        (project) =>
+          project.status !== 'archived' && project.status !== 'on_hold',
       );
       if (eligibleProjects.length === 1) {
         addProjectScore(
@@ -3082,8 +3372,9 @@ export class PersonalOpsService {
       }
     }
 
-    const bestProject = [...projectScores.entries()]
-      .sort((a, b) => b[1].score - a[1].score)[0];
+    const bestProject = [...projectScores.entries()].sort(
+      (a, b) => b[1].score - a[1].score,
+    )[0];
     if (bestProject && bestProject[1].score >= 8) {
       const project = projects.find((entry) => entry.id === bestProject[0]);
       if (project) {
@@ -3103,7 +3394,9 @@ export class PersonalOpsService {
         source.projectId = project.id;
         source.clientId = source.clientId || project.clientId || null;
         source.attributionSource = 'rule';
-        source.attributionConfidence = attributionConfidence(bestProject[1].score);
+        source.attributionConfidence = attributionConfidence(
+          bestProject[1].score,
+        );
         source.metadata = {
           ...(source.metadata || {}),
           attributionRule: combinedReasons.join(', '),
@@ -3113,14 +3406,17 @@ export class PersonalOpsService {
       }
     }
 
-    const bestClient = [...clientScores.entries()]
-      .sort((a, b) => b[1].score - a[1].score)[0];
+    const bestClient = [...clientScores.entries()].sort(
+      (a, b) => b[1].score - a[1].score,
+    )[0];
     if (bestClient && bestClient[1].score >= 7) {
       const client = clients.find((entry) => entry.id === bestClient[0]);
       if (client) {
         source.clientId = client.id;
         source.attributionSource = 'rule';
-        source.attributionConfidence = attributionConfidence(bestClient[1].score);
+        source.attributionConfidence = attributionConfidence(
+          bestClient[1].score,
+        );
         source.metadata = {
           ...(source.metadata || {}),
           attributionRule: bestClient[1].reasons.join(', '),
@@ -3130,11 +3426,17 @@ export class PersonalOpsService {
     }
   }
 
-  private currentConnectionSettingsByKey(): Map<string, PersonalOpsConnectionSettings> {
+  private currentConnectionSettingsByKey(): Map<
+    string,
+    PersonalOpsConnectionSettings
+  > {
     return new Map(
       this.listConnections()
         .filter((connection) => Boolean(connection.accountId))
-        .map((connection) => [connection.connectionKey, connection.settings || {}] as const),
+        .map(
+          (connection) =>
+            [connection.connectionKey, connection.settings || {}] as const,
+        ),
     );
   }
 
@@ -3144,7 +3446,8 @@ export class PersonalOpsService {
       metadata: { ...(source.metadata || {}) },
     };
     const linkedContactIds =
-      next.linkedContactIds || sourceMetadataStringArray(next, 'linkedContactIds');
+      next.linkedContactIds ||
+      sourceMetadataStringArray(next, 'linkedContactIds');
     next.linkedContactIds = linkedContactIds;
     next.attention = sourceAttention(next);
     next.reviewState = sourceReviewState(next);
@@ -3180,7 +3483,10 @@ export class PersonalOpsService {
     const nextMetadata = next.metadata || {};
     next.metadata = nextMetadata;
 
-    if (next.attributionSource !== 'manual' && next.attributionSource !== 'external') {
+    if (
+      next.attributionSource !== 'manual' &&
+      next.attributionSource !== 'external'
+    ) {
       const previousClientId = next.clientId || null;
       const previousProjectId = next.projectId || null;
       const previousAttributionSource =
@@ -3189,7 +3495,8 @@ export class PersonalOpsService {
           : undefined;
       const previousAttributionConfidence = next.attributionConfidence ?? null;
       const previousAttributionRule = nextMetadata.attributionRule;
-      const previousAttributionDiagnostics = nextMetadata.attributionDiagnostics;
+      const previousAttributionDiagnostics =
+        nextMetadata.attributionDiagnostics;
       const connectionSettings =
         connectionSettingsByKey.get(
           getConnectionKey(next.provider, next.accountId ?? null),
@@ -3208,7 +3515,11 @@ export class PersonalOpsService {
         repositories,
         connectionSettings,
       );
-      if (!next.clientId && !next.projectId && (previousClientId || previousProjectId)) {
+      if (
+        !next.clientId &&
+        !next.projectId &&
+        (previousClientId || previousProjectId)
+      ) {
         next.clientId = previousClientId;
         next.projectId = previousProjectId;
         next.attributionSource = previousAttributionSource;
@@ -3270,7 +3581,8 @@ export class PersonalOpsService {
     const attention = sourceAttention(source);
     const threadState = sourceThreadState(source);
     const linkedContactIds =
-      source.linkedContactIds || sourceMetadataStringArray(source, 'linkedContactIds');
+      source.linkedContactIds ||
+      sourceMetadataStringArray(source, 'linkedContactIds');
     const needsReview = sourceNeedsReview(source);
     const workStatusOverride = sourceWorkItemStatusOverride(source);
 
@@ -3322,7 +3634,11 @@ export class PersonalOpsService {
 
     if (source.kind === 'email' && isLikelyNoiseEmail(source)) {
       const existing = getWorkItem(`work:${sourceRecordKey}`);
-      if (existing && existing.status !== 'done' && existing.status !== 'ignored') {
+      if (
+        existing &&
+        existing.status !== 'done' &&
+        existing.status !== 'ignored'
+      ) {
         upsertWorkItem({
           ...existing,
           status: 'ignored',
@@ -3339,7 +3655,11 @@ export class PersonalOpsService {
       attention.operationalRisk;
     const existing = getWorkItem(`work:${sourceRecordKey}`);
     if (!actionable) {
-      if (existing && existing.status !== 'done' && existing.status !== 'ignored') {
+      if (
+        existing &&
+        existing.status !== 'done' &&
+        existing.status !== 'ignored'
+      ) {
         upsertWorkItem({
           ...existing,
           status: 'ignored',
@@ -3434,7 +3754,9 @@ export class PersonalOpsService {
     upsertSourceRecord(source);
     this.materializeDerivedRecords(source);
     this.writePublicSnapshots();
-    return getWorkItem(`work:${getSourceRecordKey('manual', null, 'manual_task', externalId)}`)!;
+    return getWorkItem(
+      `work:${getSourceRecordKey('manual', null, 'manual_task', externalId)}`,
+    )!;
   }
 
   createManualNote(input: {
@@ -3642,13 +3964,19 @@ export class PersonalOpsService {
           } else if (input.field === 'awarenessOnly') {
             const awarenessOnly = input.value === 'true';
             const existingAttention = sourceAttention(source);
-            source.reviewState = awarenessOnly ? 'accepted' : source.reviewState || null;
+            source.reviewState = awarenessOnly
+              ? 'accepted'
+              : source.reviewState || null;
             nextMetadata.attention = {
               ...existingAttention,
               awarenessOnly,
-              actionRequired: awarenessOnly ? false : existingAttention.actionRequired,
+              actionRequired: awarenessOnly
+                ? false
+                : existingAttention.actionRequired,
             };
-            nextMetadata.modelActionRequired = awarenessOnly ? false : existingAttention.actionRequired;
+            nextMetadata.modelActionRequired = awarenessOnly
+              ? false
+              : existingAttention.actionRequired;
             nextMetadata.reviewState = source.reviewState;
             if (awarenessOnly) {
               nextMetadata.workItemStatusOverride = 'ignored';
@@ -3672,14 +4000,18 @@ export class PersonalOpsService {
                 saveSourceIgnoreRules([rule, ...existingRules].slice(0, 200));
               }
               const matchingRule = alreadyExists
-                ? existingRules.find((entry) => sourceMatchesIgnoreRule(source, entry)) || rule
+                ? existingRules.find((entry) =>
+                    sourceMatchesIgnoreRule(source, entry),
+                  ) || rule
                 : rule;
               const matchingSources = listSourceRecords({
                 provider: source.provider,
                 accountId: source.accountId ?? null,
                 kind: source.kind,
                 limit: 1000,
-              }).filter((entry) => sourceMatchesIgnoreRule(entry, matchingRule));
+              }).filter((entry) =>
+                sourceMatchesIgnoreRule(entry, matchingRule),
+              );
               for (const matchingSource of matchingSources) {
                 applySourceIgnoreRule(matchingSource, matchingRule);
                 matchingSource.metadata = {
@@ -3700,7 +4032,10 @@ export class PersonalOpsService {
       const workItem = getWorkItem(input.targetId);
       if (workItem) {
         if (input.field === 'status') {
-          upsertWorkItem({ ...workItem, status: input.value as WorkItem['status'] });
+          upsertWorkItem({
+            ...workItem,
+            status: input.value as WorkItem['status'],
+          });
         } else if (input.field === 'priority') {
           upsertWorkItem({ ...workItem, priority: clampPriority(input.value) });
         } else if (input.field === 'clientId') {
@@ -3762,12 +4097,17 @@ export class PersonalOpsService {
     const projects = listProjects();
     const repositories = listRepositories();
     const clientById = new Map(clients.map((client) => [client.id, client]));
-    const projectById = new Map(projects.map((project) => [project.id, project]));
+    const projectById = new Map(
+      projects.map((project) => [project.id, project]),
+    );
     const hasExplicitRange = Boolean(input?.since || input?.until);
     const bucketLimit = Math.max((input?.limit || 20) * 12, 240);
     const bucketContactIds = new Map<string, Set<string>>();
 
-    const resolveIds = (clientId?: string | null, projectId?: string | null) => {
+    const resolveIds = (
+      clientId?: string | null,
+      projectId?: string | null,
+    ) => {
       const project = projectId ? projectById.get(projectId) || null : null;
       return {
         clientId: clientId || project?.clientId || null,
@@ -3777,7 +4117,10 @@ export class PersonalOpsService {
 
     const shouldKeepItem = (item: WorkItem) => {
       if (this.isNoiseDerivedWorkItem(item)) return false;
-      if (input?.activeOnly && (item.status === 'done' || item.status === 'ignored')) {
+      if (
+        input?.activeOnly &&
+        (item.status === 'done' || item.status === 'ignored')
+      ) {
         return false;
       }
       if (!hasExplicitRange) {
@@ -3785,9 +4128,15 @@ export class PersonalOpsService {
       }
       const updatedAt = new Date(item.updatedAt).getTime();
       const createdAt = new Date(item.createdAt).getTime();
-      const dueAt = item.dueDate ? new Date(item.dueDate).getTime() : Number.NaN;
-      const since = input?.since ? new Date(input.since).getTime() : Number.NEGATIVE_INFINITY;
-      const until = input?.until ? new Date(input.until).getTime() : Number.POSITIVE_INFINITY;
+      const dueAt = item.dueDate
+        ? new Date(item.dueDate).getTime()
+        : Number.NaN;
+      const since = input?.since
+        ? new Date(input.since).getTime()
+        : Number.NEGATIVE_INFINITY;
+      const until = input?.until
+        ? new Date(input.until).getTime()
+        : Number.POSITIVE_INFINITY;
       const touchedInRange =
         (updatedAt >= since && updatedAt <= until) ||
         (createdAt >= since && createdAt <= until) ||
@@ -3812,12 +4161,19 @@ export class PersonalOpsService {
       since: input?.since || plusDays(new Date(), -7).toISOString(),
       until: input?.until,
       limit: bucketLimit,
-    }).filter((activity) => activity.type === 'git_commit' || !activity.sourceRecordKey);
+    }).filter(
+      (activity) => activity.type === 'git_commit' || !activity.sourceRecordKey,
+    );
 
-    const relevantWorkItems = listWorkItems({ limit: Math.max(bucketLimit, 400) }).filter(shouldKeepItem);
+    const relevantWorkItems = listWorkItems({
+      limit: Math.max(bucketLimit, 400),
+    }).filter(shouldKeepItem);
 
     const buckets = new Map<string, PersonalOpsWorkstream>();
-    const ensureBucket = (clientId?: string | null, projectId?: string | null) => {
+    const ensureBucket = (
+      clientId?: string | null,
+      projectId?: string | null,
+    ) => {
       const resolved = resolveIds(clientId, projectId);
       const key = `${resolved.clientId || 'none'}:${resolved.projectId || 'none'}`;
       const existing = buckets.get(key);
@@ -3826,8 +4182,12 @@ export class PersonalOpsService {
       }
       const created: PersonalOpsWorkstream = {
         key,
-        client: resolved.clientId ? clientById.get(resolved.clientId) || null : null,
-        project: resolved.projectId ? projectById.get(resolved.projectId) || null : null,
+        client: resolved.clientId
+          ? clientById.get(resolved.clientId) || null
+          : null,
+        project: resolved.projectId
+          ? projectById.get(resolved.projectId) || null
+          : null,
         items: [],
         sourceRecords: [],
         recentActivity: [],
@@ -3851,8 +4211,13 @@ export class PersonalOpsService {
       const bucket = ensureBucket(item.clientId, item.projectId);
       bucket.items.push(item);
       if (item.status === 'blocked') bucket.blockerCount += 1;
-      if (item.status === 'waiting' || item.status === 'on_hold') bucket.waitingCount += 1;
-      bucket.lastUpdatedAt = latestIso(bucket.lastUpdatedAt, item.updatedAt, item.createdAt);
+      if (item.status === 'waiting' || item.status === 'on_hold')
+        bucket.waitingCount += 1;
+      bucket.lastUpdatedAt = latestIso(
+        bucket.lastUpdatedAt,
+        item.updatedAt,
+        item.createdAt,
+      );
       bucket.nextDueAt = earliestFutureIso(bucket.nextDueAt, item.dueDate);
       const contactIds = bucketContactIds.get(bucket.key)!;
       for (const contactId of item.linkedContactIds || []) {
@@ -3875,7 +4240,8 @@ export class PersonalOpsService {
       );
       bucket.nextDueAt = earliestFutureIso(bucket.nextDueAt, source.dueAt);
       const contactIds = bucketContactIds.get(bucket.key)!;
-      for (const contactId of source.linkedContactIds || sourceMetadataStringArray(source, 'linkedContactIds')) {
+      for (const contactId of source.linkedContactIds ||
+        sourceMetadataStringArray(source, 'linkedContactIds')) {
         contactIds.add(contactId);
       }
     }
@@ -3884,11 +4250,17 @@ export class PersonalOpsService {
       if (!activity.relatedClientId && !activity.relatedProjectId) {
         continue;
       }
-      const bucket = ensureBucket(activity.relatedClientId, activity.relatedProjectId);
+      const bucket = ensureBucket(
+        activity.relatedClientId,
+        activity.relatedProjectId,
+      );
       if (bucket.recentActivity.length < 8) {
         bucket.recentActivity.push(activity);
       }
-      bucket.lastUpdatedAt = latestIso(bucket.lastUpdatedAt, activity.timestamp);
+      bucket.lastUpdatedAt = latestIso(
+        bucket.lastUpdatedAt,
+        activity.timestamp,
+      );
     }
 
     for (const repository of repositories) {
@@ -3899,9 +4271,17 @@ export class PersonalOpsService {
         const repoLastTouched = repository.lastCommitAt
           ? new Date(repository.lastCommitAt).getTime()
           : Number.NaN;
-        const since = input?.since ? new Date(input.since).getTime() : Number.NEGATIVE_INFINITY;
-        const until = input?.until ? new Date(input.until).getTime() : Number.POSITIVE_INFINITY;
-        if (Number.isNaN(repoLastTouched) || repoLastTouched < since || repoLastTouched > until) {
+        const since = input?.since
+          ? new Date(input.since).getTime()
+          : Number.NEGATIVE_INFINITY;
+        const until = input?.until
+          ? new Date(input.until).getTime()
+          : Number.POSITIVE_INFINITY;
+        if (
+          Number.isNaN(repoLastTouched) ||
+          repoLastTouched < since ||
+          repoLastTouched > until
+        ) {
           continue;
         }
       }
@@ -3916,7 +4296,9 @@ export class PersonalOpsService {
 
     const streams = [...buckets.values()]
       .map((bucket) => {
-        bucket.linkedContacts = [...(bucketContactIds.get(bucket.key) || new Set<string>())]
+        bucket.linkedContacts = [
+          ...(bucketContactIds.get(bucket.key) || new Set<string>()),
+        ]
           .map((contactId) => getContact(contactId))
           .filter((contact): contact is Contact => Boolean(contact))
           .slice(0, 8);
@@ -3924,8 +4306,12 @@ export class PersonalOpsService {
           const order = { urgent: 0, high: 1, medium: 2, low: 3 };
           return order[a.priority] - order[b.priority];
         });
-        bucket.sourceRecords.sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
-        bucket.recentActivity.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+        bucket.sourceRecords.sort((a, b) =>
+          b.occurredAt.localeCompare(a.occurredAt),
+        );
+        bucket.recentActivity.sort((a, b) =>
+          b.timestamp.localeCompare(a.timestamp),
+        );
         bucket.repositories.sort((a, b) => {
           const aTime = a.lastCommitAt ? new Date(a.lastCommitAt).getTime() : 0;
           const bTime = b.lastCommitAt ? new Date(b.lastCommitAt).getTime() : 0;
@@ -3959,7 +4345,10 @@ export class PersonalOpsService {
           if (input.source) existing.sourceCount += 1;
           if (input.activity) existing.activityCount += 1;
           if (input.repository) existing.repositoryCount += 1;
-          existing.lastUpdatedAt = latestIso(existing.lastUpdatedAt, input.lastUpdatedAt);
+          existing.lastUpdatedAt = latestIso(
+            existing.lastUpdatedAt,
+            input.lastUpdatedAt,
+          );
           links.set(key, existing);
         };
 
@@ -3989,12 +4378,15 @@ export class PersonalOpsService {
             });
           }
           if (source.kind === 'email' && source.externalParentId) {
-            touchLink(`email-thread:${source.provider}:${source.externalParentId}`, {
-              label: 'Email thread',
-              kind: 'email_thread',
-              lastUpdatedAt: source.occurredAt,
-              source: true,
-            });
+            touchLink(
+              `email-thread:${source.provider}:${source.externalParentId}`,
+              {
+                label: 'Email thread',
+                kind: 'email_thread',
+                lastUpdatedAt: source.occurredAt,
+                source: true,
+              },
+            );
           }
           if (source.kind === 'slack_message' && source.externalParentId) {
             const channelLabel =
@@ -4011,7 +4403,10 @@ export class PersonalOpsService {
         }
 
         for (const activity of bucket.recentActivity) {
-          for (const issueKey of extractIssueKeys(activity.summary, activity.rawReference)) {
+          for (const issueKey of extractIssueKeys(
+            activity.summary,
+            activity.rawReference,
+          )) {
             touchLink(`jira:${issueKey}`, {
               label: issueKey,
               kind: 'jira_issue',
@@ -4059,36 +4454,61 @@ export class PersonalOpsService {
           })
           .sort((a, b) => {
             const total = (link: PersonalOpsWorkstreamLink) =>
-              link.itemCount + link.sourceCount + link.activityCount + link.repositoryCount;
+              link.itemCount +
+              link.sourceCount +
+              link.activityCount +
+              link.repositoryCount;
             const countDiff = total(b) - total(a);
             if (countDiff !== 0) return countDiff;
             return (b.lastUpdatedAt || '').localeCompare(a.lastUpdatedAt || '');
           })
           .slice(0, 6);
 
-        const actionableSources = bucket.sourceRecords.filter(sourceNeedsAttention).length;
+        const actionableSources =
+          bucket.sourceRecords.filter(sourceNeedsAttention).length;
         const awarenessSources = bucket.sourceRecords.filter((source) => {
           const attention = sourceAttention(source);
-          return attention.awarenessOnly && (attention.reportWorthy || attention.operationalRisk);
+          return (
+            attention.awarenessOnly &&
+            (attention.reportWorthy || attention.operationalRisk)
+          );
         }).length;
-        const reviewSources = bucket.sourceRecords.filter(sourceNeedsReview).length;
+        const reviewSources =
+          bucket.sourceRecords.filter(sourceNeedsReview).length;
         const activeRepos = bucket.repositories.filter((repo) => {
           if (!repo.lastCommitAt) return false;
-          return new Date(repo.lastCommitAt).getTime() >= plusDays(new Date(), -14).getTime();
+          return (
+            new Date(repo.lastCommitAt).getTime() >=
+            plusDays(new Date(), -14).getTime()
+          );
         }).length;
         bucket.openLoopCount =
-          bucket.items.filter((item) => workItemOpenLoopState(item) !== 'closed').length +
-          awarenessSources;
+          bucket.items.filter(
+            (item) => workItemOpenLoopState(item) !== 'closed',
+          ).length + awarenessSources;
         bucket.needsReviewCount =
-          bucket.items.filter((item) => item.needsReview).length + reviewSources;
+          bucket.items.filter((item) => item.needsReview).length +
+          reviewSources;
         const signalParts = [
-          bucket.blockerCount ? `${bucket.blockerCount} blocker${bucket.blockerCount === 1 ? '' : 's'}` : null,
+          bucket.blockerCount
+            ? `${bucket.blockerCount} blocker${bucket.blockerCount === 1 ? '' : 's'}`
+            : null,
           bucket.waitingCount ? `${bucket.waitingCount} waiting` : null,
-          bucket.needsReviewCount ? `${bucket.needsReviewCount} review${bucket.needsReviewCount === 1 ? '' : 's'}` : null,
-          actionableSources ? `${actionableSources} inbound signal${actionableSources === 1 ? '' : 's'}` : null,
-          bucket.items.length ? `${bucket.items.length} open item${bucket.items.length === 1 ? '' : 's'}` : null,
-          activeRepos ? `${activeRepos} active repo${activeRepos === 1 ? '' : 's'}` : null,
-          bucket.links.length ? `${bucket.links.length} linked evidence ${bucket.links.length === 1 ? 'anchor' : 'anchors'}` : null,
+          bucket.needsReviewCount
+            ? `${bucket.needsReviewCount} review${bucket.needsReviewCount === 1 ? '' : 's'}`
+            : null,
+          actionableSources
+            ? `${actionableSources} inbound signal${actionableSources === 1 ? '' : 's'}`
+            : null,
+          bucket.items.length
+            ? `${bucket.items.length} open item${bucket.items.length === 1 ? '' : 's'}`
+            : null,
+          activeRepos
+            ? `${activeRepos} active repo${activeRepos === 1 ? '' : 's'}`
+            : null,
+          bucket.links.length
+            ? `${bucket.links.length} linked evidence ${bucket.links.length === 1 ? 'anchor' : 'anchors'}`
+            : null,
           bucket.nextDueAt ? `Due ${formatDateTime(bucket.nextDueAt)}` : null,
         ].filter((entry): entry is string => Boolean(entry));
         bucket.signals = signalParts.slice(0, 4);
@@ -4111,13 +4531,22 @@ export class PersonalOpsService {
       })
       .sort((a, b) => {
         const score = (stream: PersonalOpsWorkstream) => {
-          const urgent = stream.items.filter((item) => item.priority === 'urgent').length;
-          const high = stream.items.filter((item) => item.priority === 'high').length;
-          const actionableSources = stream.sourceRecords.filter(sourceNeedsAttention).length;
+          const urgent = stream.items.filter(
+            (item) => item.priority === 'urgent',
+          ).length;
+          const high = stream.items.filter(
+            (item) => item.priority === 'high',
+          ).length;
+          const actionableSources =
+            stream.sourceRecords.filter(sourceNeedsAttention).length;
           const recency = stream.lastUpdatedAt
             ? Math.max(
                 0,
-                100 - Math.floor((Date.now() - new Date(stream.lastUpdatedAt).getTime()) / 3_600_000),
+                100 -
+                  Math.floor(
+                    (Date.now() - new Date(stream.lastUpdatedAt).getTime()) /
+                      3_600_000,
+                  ),
               )
             : 0;
           return (
@@ -4178,12 +4607,16 @@ export class PersonalOpsService {
         !!item.dueDate &&
         item.dueDate < todayStart.toISOString(),
     );
-    const followUps = allWork.filter(
-      (item) =>
-        item.status === 'open' &&
-        item.title.toLowerCase().includes('follow up'),
-    ).slice(0, 8);
-    const blockers = allWork.filter((item) => item.status === 'blocked').slice(0, 8);
+    const followUps = allWork
+      .filter(
+        (item) =>
+          item.status === 'open' &&
+          item.title.toLowerCase().includes('follow up'),
+      )
+      .slice(0, 8);
+    const blockers = allWork
+      .filter((item) => item.status === 'blocked')
+      .slice(0, 8);
     const inbox = this.selectInboxRecords({
       since: todayStart.toISOString(),
       until: tomorrow,
@@ -4196,12 +4629,19 @@ export class PersonalOpsService {
     })
       .map(normalizeSourceForView)
       .filter((source) => {
-        if (source.kind !== 'email' && source.kind !== 'slack_message' && source.kind !== 'jira_issue') {
+        if (
+          source.kind !== 'email' &&
+          source.kind !== 'slack_message' &&
+          source.kind !== 'jira_issue'
+        ) {
           return false;
         }
         if (isLikelyNoiseEmail(source)) return false;
         const attention = sourceAttention(source);
-        return attention.awarenessOnly && (attention.reportWorthy || attention.operationalRisk);
+        return (
+          attention.awarenessOnly &&
+          (attention.reportWorthy || attention.operationalRisk)
+        );
       })
       .sort((a, b) => {
         const priorityDiff = inboxSortScore(b) - inboxSortScore(a);
@@ -4213,8 +4653,10 @@ export class PersonalOpsService {
     const approvalQueue = this.getApprovalQueue().slice(0, 8);
     const topWorkstream = workstreams[0];
     const workstreamLabel = topWorkstream
-      ? [topWorkstream.client?.name || 'Unassigned client', topWorkstream.project?.name || 'General work']
-          .join(' / ')
+      ? [
+          topWorkstream.client?.name || 'Unassigned client',
+          topWorkstream.project?.name || 'General work',
+        ].join(' / ')
       : null;
     const suggestedPlan = [
       workstreamLabel
@@ -4222,8 +4664,12 @@ export class PersonalOpsService {
         : priorities[0]
           ? `Start with ${priorities[0].title}`
           : 'Review the inbox and overdue items first.',
-      meetings[0] ? `Prep for ${meetings[0].title}` : 'No meetings require prep this morning.',
-      blockers[0] ? `Unblock ${blockers[0].title}` : 'No blockers are currently tracked.',
+      meetings[0]
+        ? `Prep for ${meetings[0].title}`
+        : 'No meetings require prep this morning.',
+      blockers[0]
+        ? `Unblock ${blockers[0].title}`
+        : 'No blockers are currently tracked.',
       approvalQueue[0]
         ? `Review ${approvalQueue[0].title} in the approval queue.`
         : null,
@@ -4304,7 +4750,9 @@ export class PersonalOpsService {
   private syncMemoryFacts(): void {
     const contacts = listContacts({ limit: 400 });
     const clients = new Map(listClients().map((client) => [client.id, client]));
-    const projects = new Map(listProjects().map((project) => [project.id, project]));
+    const projects = new Map(
+      listProjects().map((project) => [project.id, project]),
+    );
     for (const contact of contacts) {
       if (contact.defaultClientId) {
         const client = clients.get(contact.defaultClientId);
@@ -4380,8 +4828,12 @@ export class PersonalOpsService {
     for (const suggestion of listContactMappingSuggestions({ limit: 300 })) {
       const contact = getContact(suggestion.contactId);
       if (!contact) continue;
-      const client = suggestion.clientId ? clients.get(suggestion.clientId) : null;
-      const project = suggestion.projectId ? projects.get(suggestion.projectId) : null;
+      const client = suggestion.clientId
+        ? clients.get(suggestion.clientId)
+        : null;
+      const project = suggestion.projectId
+        ? projects.get(suggestion.projectId)
+        : null;
       upsertMemoryFact({
         kind: project ? 'contact_project' : 'contact_client',
         subjectType: 'contact',
@@ -4391,8 +4843,12 @@ export class PersonalOpsService {
           : `${contact.name} may map to ${client?.name || 'a client'}`,
         value: project?.name || client?.name || 'Unassigned',
         confidence: suggestion.confidence,
-        status: suggestion.status === 'accepted' ? 'accepted' : suggestion.status,
-        provenance: [suggestion.basis, `${suggestion.occurrenceCount} observed match${suggestion.occurrenceCount === 1 ? '' : 'es'}`],
+        status:
+          suggestion.status === 'accepted' ? 'accepted' : suggestion.status,
+        provenance: [
+          suggestion.basis,
+          `${suggestion.occurrenceCount} observed match${suggestion.occurrenceCount === 1 ? '' : 'es'}`,
+        ],
         contactId: contact.id,
         clientId: suggestion.clientId,
         projectId: suggestion.projectId,
@@ -4407,7 +4863,9 @@ export class PersonalOpsService {
   }
 
   acceptMemoryFact(id: string): void {
-    const fact = listMemoryFacts({ limit: 500 }).find((entry) => entry.id === id);
+    const fact = listMemoryFacts({ limit: 500 }).find(
+      (entry) => entry.id === id,
+    );
     if (!fact) {
       throw new Error('Memory fact not found.');
     }
@@ -4428,7 +4886,10 @@ export class PersonalOpsService {
         });
       }
     }
-    if (fact.contactId && (fact.kind === 'contact_client' || fact.kind === 'contact_project')) {
+    if (
+      fact.contactId &&
+      (fact.kind === 'contact_client' || fact.kind === 'contact_project')
+    ) {
       const contact = getContact(fact.contactId);
       if (contact) {
         upsertContact({
@@ -4479,11 +4940,16 @@ export class PersonalOpsService {
   }
 
   rejectMemoryFact(id: string): void {
-    const fact = listMemoryFacts({ limit: 500 }).find((entry) => entry.id === id);
+    const fact = listMemoryFacts({ limit: 500 }).find(
+      (entry) => entry.id === id,
+    );
     if (!fact) {
       throw new Error('Memory fact not found.');
     }
-    if (fact.contactId && (fact.kind === 'contact_client' || fact.kind === 'contact_project')) {
+    if (
+      fact.contactId &&
+      (fact.kind === 'contact_client' || fact.kind === 'contact_project')
+    ) {
       const matchingSuggestions = listContactMappingSuggestions({
         contactId: fact.contactId,
         limit: 100,
@@ -4529,12 +4995,15 @@ export class PersonalOpsService {
     return parts.join(' ');
   }
 
-  private buildReplyDraftAction(source: SourceRecord): ApprovalQueueItem | null {
+  private buildReplyDraftAction(
+    source: SourceRecord,
+  ): ApprovalQueueItem | null {
     if (source.kind !== 'email' && source.kind !== 'slack_message') return null;
     const attention = sourceAttention(source);
     if (!attention.actionRequired || isLikelyNoiseEmail(source)) return null;
     const dedupeKey = `reply:${sanitizeSourceRef(source)}`;
-    const confidence = attention.actionConfidence ?? attention.mappingConfidence ?? 0.68;
+    const confidence =
+      attention.actionConfidence ?? attention.mappingConfidence ?? 0.68;
     const greeting =
       source.kind === 'email'
         ? 'Thanks for the update.'
@@ -4571,7 +5040,8 @@ export class PersonalOpsService {
       workItemId: null,
       reportType: null,
       linkedContactIds:
-        source.linkedContactIds || sourceMetadataStringArray(source, 'linkedContactIds'),
+        source.linkedContactIds ||
+        sourceMetadataStringArray(source, 'linkedContactIds'),
       evidence: [sanitizeSourceRef(source)],
       artifactRef: null,
       createdAt: new Date().toISOString(),
@@ -4606,14 +5076,16 @@ export class PersonalOpsService {
         .filter(Boolean)
         .join('\n'),
       reason: 'Actionable source without a durable tracked follow-up yet.',
-      confidence: attention.actionConfidence ?? attention.mappingConfidence ?? 0.66,
+      confidence:
+        attention.actionConfidence ?? attention.mappingConfidence ?? 0.66,
       clientId: source.clientId || null,
       projectId: source.projectId || null,
       sourceRecordKey: sourceRef,
       workItemId: existingWorkItem?.id || null,
       reportType: null,
       linkedContactIds:
-        source.linkedContactIds || sourceMetadataStringArray(source, 'linkedContactIds'),
+        source.linkedContactIds ||
+        sourceMetadataStringArray(source, 'linkedContactIds'),
       evidence: [sourceRef],
       artifactRef: null,
       createdAt: new Date().toISOString(),
@@ -4622,11 +5094,18 @@ export class PersonalOpsService {
     };
   }
 
-  private buildMeetingPrepAction(source: SourceRecord): ApprovalQueueItem | null {
+  private buildMeetingPrepAction(
+    source: SourceRecord,
+  ): ApprovalQueueItem | null {
     if (source.kind !== 'calendar_event') return null;
-    if (sourceMetadataString(source, 'calendarIntent') === 'reminder') return null;
+    if (sourceMetadataString(source, 'calendarIntent') === 'reminder')
+      return null;
     const occurredAt = new Date(source.occurredAt).getTime();
-    if (Number.isNaN(occurredAt) || occurredAt < Date.now() || occurredAt > Date.now() + 36 * 60 * 60_000) {
+    if (
+      Number.isNaN(occurredAt) ||
+      occurredAt < Date.now() ||
+      occurredAt > Date.now() + 36 * 60 * 60_000
+    ) {
       return null;
     }
     if (!source.clientId && !source.projectId) return null;
@@ -4643,9 +5122,21 @@ export class PersonalOpsService {
       `Meeting: ${source.title}`,
       `When: ${formatDateTime(source.occurredAt)}`,
       source.summary ? `Context: ${source.summary}` : '',
-      stream?.signals.length ? `Current signals: ${stream.signals.join('; ')}` : '',
-      stream?.items.length ? `Open items: ${stream.items.slice(0, 4).map((item) => item.title).join('; ')}` : '',
-      stream?.links.length ? `Linked evidence: ${stream.links.slice(0, 4).map((link) => link.label).join('; ')}` : '',
+      stream?.signals.length
+        ? `Current signals: ${stream.signals.join('; ')}`
+        : '',
+      stream?.items.length
+        ? `Open items: ${stream.items
+            .slice(0, 4)
+            .map((item) => item.title)
+            .join('; ')}`
+        : '',
+      stream?.links.length
+        ? `Linked evidence: ${stream.links
+            .slice(0, 4)
+            .map((link) => link.label)
+            .join('; ')}`
+        : '',
     ].filter(Boolean);
     return {
       id: '',
@@ -4655,7 +5146,8 @@ export class PersonalOpsService {
       title: `Prep for ${source.title}`,
       summary: 'Prepare talking points and open items before the meeting.',
       body: prepLines.join('\n'),
-      reason: 'Upcoming meeting with enough context to prepare a quick internal brief.',
+      reason:
+        'Upcoming meeting with enough context to prepare a quick internal brief.',
       confidence: 0.84,
       clientId: source.clientId || null,
       projectId: source.projectId || null,
@@ -4663,7 +5155,8 @@ export class PersonalOpsService {
       workItemId: null,
       reportType: null,
       linkedContactIds:
-        source.linkedContactIds || sourceMetadataStringArray(source, 'linkedContactIds'),
+        source.linkedContactIds ||
+        sourceMetadataStringArray(source, 'linkedContactIds'),
       evidence: [
         sanitizeSourceRef(source),
         ...(stream?.links.map((link) => link.key) || []).slice(0, 4),
@@ -4675,7 +5168,9 @@ export class PersonalOpsService {
     };
   }
 
-  private buildReportDraftAction(type: 'standup' | 'wrap'): ApprovalQueueItem | null {
+  private buildReportDraftAction(
+    type: 'standup' | 'wrap',
+  ): ApprovalQueueItem | null {
     const latest = this.getLatestReport(type);
     const todayStart = startOfDay().toISOString();
     if (latest && latest.generatedAt >= todayStart) {
@@ -4723,7 +5218,9 @@ export class PersonalOpsService {
 
   private syncApprovalQueue(): void {
     const existing = new Map(
-      listApprovalQueueItems({ limit: 500 }).map((item) => [item.dedupeKey, item] as const),
+      listApprovalQueueItems({ limit: 500 }).map(
+        (item) => [item.dedupeKey, item] as const,
+      ),
     );
     const candidates: ApprovalQueueItem[] = [];
     const recentSources = listSourceRecords({
@@ -4762,17 +5259,25 @@ export class PersonalOpsService {
   }
 
   approveQueueItem(id: string): ApprovalQueueItem {
-    const item = listApprovalQueueItems({ limit: 400 }).find((entry) => entry.id === id);
+    const item = listApprovalQueueItems({ limit: 400 }).find(
+      (entry) => entry.id === id,
+    );
     if (!item) {
       throw new Error('Approval item not found.');
     }
     let artifactRef: string | null = item.artifactRef;
     if (item.kind === 'follow_up_task') {
       const workItem = upsertWorkItem({
-        id: item.workItemId || (item.sourceRecordKey ? `work:${item.sourceRecordKey}` : undefined),
+        id:
+          item.workItemId ||
+          (item.sourceRecordKey ? `work:${item.sourceRecordKey}` : undefined),
         title: item.title.replace(/^Follow up:\s*/i, ''),
-        sourceKind: item.sourceRecordKey ? parseSourceRecordKey(item.sourceRecordKey)?.kind || 'manual_task' : 'manual_task',
-        sourceProvider: item.sourceRecordKey ? (parseSourceRecordKey(item.sourceRecordKey)?.provider || 'manual') : 'manual',
+        sourceKind: item.sourceRecordKey
+          ? parseSourceRecordKey(item.sourceRecordKey)?.kind || 'manual_task'
+          : 'manual_task',
+        sourceProvider: item.sourceRecordKey
+          ? parseSourceRecordKey(item.sourceRecordKey)?.provider || 'manual'
+          : 'manual',
         sourceRecordKey: item.sourceRecordKey,
         clientId: item.clientId,
         projectId: item.projectId,
@@ -4805,7 +5310,9 @@ export class PersonalOpsService {
   }
 
   rejectQueueItem(id: string): ApprovalQueueItem {
-    const item = listApprovalQueueItems({ limit: 400 }).find((entry) => entry.id === id);
+    const item = listApprovalQueueItems({ limit: 400 }).find(
+      (entry) => entry.id === id,
+    );
     if (!item) {
       throw new Error('Approval item not found.');
     }
@@ -4820,9 +5327,13 @@ export class PersonalOpsService {
 
   editQueueItem(
     id: string,
-    input: Partial<Pick<ApprovalQueueItem, 'title' | 'summary' | 'body' | 'reason'>>,
+    input: Partial<
+      Pick<ApprovalQueueItem, 'title' | 'summary' | 'body' | 'reason'>
+    >,
   ): ApprovalQueueItem {
-    const item = listApprovalQueueItems({ limit: 400 }).find((entry) => entry.id === id);
+    const item = listApprovalQueueItems({ limit: 400 }).find(
+      (entry) => entry.id === id,
+    );
     if (!item) {
       throw new Error('Approval item not found.');
     }
@@ -4868,7 +5379,9 @@ export class PersonalOpsService {
       defaultClientId:
         input.clientId !== undefined ? input.clientId : contact.defaultClientId,
       defaultProjectId:
-        input.projectId !== undefined ? input.projectId : contact.defaultProjectId,
+        input.projectId !== undefined
+          ? input.projectId
+          : contact.defaultProjectId,
       sourceCount: contact.sourceCount,
     });
     if (input.identity?.value?.trim()) {
@@ -4894,7 +5407,9 @@ export class PersonalOpsService {
   }
 
   private accountLabelForQuestion(connection: ConnectedAccount): string {
-    return connection.accountLabel || connection.accountId || connection.provider;
+    return (
+      connection.accountLabel || connection.accountId || connection.provider
+    );
   }
 
   private inferClientForConnectionQuestion(
@@ -4902,8 +5417,12 @@ export class PersonalOpsService {
     clients: Client[],
   ): Client | null {
     const accountLabel = this.accountLabelForQuestion(connection);
-    const domainPart = accountLabel.includes('@') ? accountLabel.split('@')[1] || '' : '';
-    const domainToken = normalizeMatchText(domainPart.split('.')[0] || domainPart);
+    const domainPart = accountLabel.includes('@')
+      ? accountLabel.split('@')[1] || ''
+      : '';
+    const domainToken = normalizeMatchText(
+      domainPart.split('.')[0] || domainPart,
+    );
     if (!domainToken) return null;
     return (
       clients.find((client) => {
@@ -4924,7 +5443,8 @@ export class PersonalOpsService {
   ): Project | null {
     if (!client) return null;
     const clientProjects = projects.filter(
-      (project) => project.clientId === client.id && project.status !== 'archived',
+      (project) =>
+        project.clientId === client.id && project.status !== 'archived',
     );
     if (clientProjects.length === 1) return clientProjects[0];
     if (!clientProjects.length) return null;
@@ -4932,12 +5452,19 @@ export class PersonalOpsService {
       `${client.roles.join(' ')} ${client.notes} ${connection.settings?.triageGuidance || ''}`.toLowerCase();
     const scored = clientProjects
       .map((project) => {
-        const projectText = `${project.name} ${project.tags.join(' ')} ${project.notes}`.toLowerCase();
+        const projectText =
+          `${project.name} ${project.tags.join(' ')} ${project.notes}`.toLowerCase();
         let score = 0;
         if (projectText.includes('general')) score += 1;
-        if (roleContext.includes('coo') && projectText.includes('coo')) score += 5;
-        if (roleContext.includes('cto') && projectText.includes('cto')) score += 5;
-        if (roleContext.includes('operations') && projectText.includes('operations')) score += 3;
+        if (roleContext.includes('coo') && projectText.includes('coo'))
+          score += 5;
+        if (roleContext.includes('cto') && projectText.includes('cto'))
+          score += 5;
+        if (
+          roleContext.includes('operations') &&
+          projectText.includes('operations')
+        )
+          score += 3;
         return { project, score };
       })
       .sort((left, right) => right.score - left.score);
@@ -4963,15 +5490,19 @@ export class PersonalOpsService {
 
   private isLikelyReminderEvent(source: SourceRecord): boolean {
     if (source.kind !== 'calendar_event') return false;
-    if (sourceMetadataString(source, 'calendarIntent') === 'reminder') return false;
+    if (sourceMetadataString(source, 'calendarIntent') === 'reminder')
+      return false;
     const text = `${source.title}\n${source.summary}`.toLowerCase();
     if (source.participants.length > 1) return false;
-    return /\b(lunch|move car|reminder|pick up|drop off|call|task|todo|note to self)\b/i.test(text);
+    return /\b(lunch|move car|reminder|pick up|drop off|call|task|todo|note to self)\b/i.test(
+      text,
+    );
   }
 
   private buildSetupAssistantQuestions(): AssistantQuestionCandidate[] {
     const connections = this.listConnections().filter(
-      (connection) => Boolean(connection.accountId) && connection.status !== 'disconnected',
+      (connection) =>
+        Boolean(connection.accountId) && connection.status !== 'disconnected',
     );
     const clients = this.getClients();
     const projects = this.getProjects();
@@ -4981,12 +5512,19 @@ export class PersonalOpsService {
       const settings = connection.settings || {};
       const inferredClient =
         (settings.defaultClientId
-          ? clients.find((client) => client.id === settings.defaultClientId) || null
+          ? clients.find((client) => client.id === settings.defaultClientId) ||
+            null
           : this.inferClientForConnectionQuestion(connection, clients)) || null;
       const inferredProject =
         (settings.defaultProjectId
-          ? projects.find((project) => project.id === settings.defaultProjectId) || null
-          : this.inferProjectForConnectionQuestion(connection, inferredClient, projects)) || null;
+          ? projects.find(
+              (project) => project.id === settings.defaultProjectId,
+            ) || null
+          : this.inferProjectForConnectionQuestion(
+              connection,
+              inferredClient,
+              projects,
+            )) || null;
       if (!settings.defaultClientId && inferredClient) {
         questions.push({
           dedupeKey: `setup:default:${connection.connectionKey}:${inferredClient.id}:${inferredProject?.id || ''}`,
@@ -4995,21 +5533,26 @@ export class PersonalOpsService {
           targetId: connection.connectionKey,
           urgency: 'inline',
           prompt: `Should ${this.accountLabelForQuestion(connection)} default to ${inferredClient.name}${inferredProject ? ` / ${inferredProject.name}` : ''}?`,
-          rationale: 'This account is connected, but it is still missing a saved default mapping.',
-          recommendedOptionId: inferredProject ? 'accept_recommended' : 'accept_client',
+          rationale:
+            'This account is connected, but it is still missing a saved default mapping.',
+          recommendedOptionId: inferredProject
+            ? 'accept_recommended'
+            : 'accept_client',
           options: inferredProject
             ? [
                 {
                   id: 'accept_recommended',
                   label: `Use ${inferredClient.name} / ${inferredProject.name}`,
                   scope: 'account',
-                  effectSummary: 'Save both the client and project as the account default.',
+                  effectSummary:
+                    'Save both the client and project as the account default.',
                 },
                 {
                   id: 'client_only',
                   label: `Keep ${inferredClient.name} client-only`,
                   scope: 'account',
-                  effectSummary: 'Use the client by default and wait for stronger project signals.',
+                  effectSummary:
+                    'Use the client by default and wait for stronger project signals.',
                 },
               ]
             : [
@@ -5017,7 +5560,8 @@ export class PersonalOpsService {
                   id: 'accept_client',
                   label: `Use ${inferredClient.name}`,
                   scope: 'account',
-                  effectSummary: 'Save the client as the default for this account.',
+                  effectSummary:
+                    'Save the client as the default for this account.',
                 },
               ],
           effectPreview: inferredProject
@@ -5038,20 +5582,23 @@ export class PersonalOpsService {
           targetId: connection.connectionKey,
           urgency: 'inline',
           prompt: `Should ${this.accountLabelForQuestion(connection)} default to ${inferredProject.name} under ${inferredClient?.name || 'this client'}?`,
-          rationale: 'This account already knows the client, but a project default may remove repetitive review.',
+          rationale:
+            'This account already knows the client, but a project default may remove repetitive review.',
           recommendedOptionId: 'accept_project',
           options: [
             {
               id: 'accept_project',
               label: `Use ${inferredProject.name}`,
               scope: 'account',
-              effectSummary: 'Save the project as the default for this account.',
+              effectSummary:
+                'Save the project as the default for this account.',
             },
             {
               id: 'client_only',
               label: 'Stay client-only',
               scope: 'account',
-              effectSummary: 'Keep relying on client-level defaults unless project signals are explicit.',
+              effectSummary:
+                'Keep relying on client-level defaults unless project signals are explicit.',
             },
           ],
           effectPreview: `This will tune ${this.accountLabelForQuestion(connection)} at the project level for faster attribution.`,
@@ -5066,7 +5613,8 @@ export class PersonalOpsService {
           targetId: connection.connectionKey,
           urgency: 'inline',
           prompt: `How should ${this.accountLabelForQuestion(connection)} treat shared, automated, or low-signal items?`,
-          rationale: 'This account is connected, but the assistant still lacks explicit triage guidance.',
+          rationale:
+            'This account is connected, but the assistant still lacks explicit triage guidance.',
           recommendedOptionId: 'apply_recommended_guidance',
           options: [
             {
@@ -5115,27 +5663,35 @@ export class PersonalOpsService {
           targetType: 'setup',
           targetId: null,
           urgency: 'queued',
-          prompt: 'Which clients and projects should the assistant know about first?',
+          prompt:
+            'Which clients and projects should the assistant know about first?',
           rationale:
             'The registry is still sparse, which weakens attribution and workstream grouping.',
           recommendedOptionId: null,
           options: [],
-          effectPreview: 'Add the active clients and projects you work against most often.',
+          effectPreview:
+            'Add the active clients and projects you work against most often.',
           createdFrom: 'setup_fallback_registry',
         });
-      } else if (repositories.some((repository) => !repository.clientId && !repository.projectId)) {
+      } else if (
+        repositories.some(
+          (repository) => !repository.clientId && !repository.projectId,
+        )
+      ) {
         questions.push({
           dedupeKey: 'setup:fallback:repositories',
           surface: 'connections',
           targetType: 'setup',
           targetId: null,
           urgency: 'queued',
-          prompt: 'Which repositories should be assigned before the assistant learns more?',
+          prompt:
+            'Which repositories should be assigned before the assistant learns more?',
           rationale:
             'Unassigned repositories reduce standup quality and workstream evidence.',
           recommendedOptionId: null,
           options: [],
-          effectPreview: 'Assign the live repositories first so repo activity maps cleanly to work.',
+          effectPreview:
+            'Assign the live repositories first so repo activity maps cleanly to work.',
           createdFrom: 'setup_fallback_repositories',
         });
       }
@@ -5145,7 +5701,9 @@ export class PersonalOpsService {
 
   private buildInboxAssistantQuestions(): AssistantQuestionCandidate[] {
     return this.getInboxView({ includeNoise: false })
-      .filter((source) => source.kind === 'email' || source.kind === 'slack_message')
+      .filter(
+        (source) => source.kind === 'email' || source.kind === 'slack_message',
+      )
       .filter((source) => sourceNeedsReview(source))
       .slice(0, 8)
       .map((source) => ({
@@ -5155,9 +5713,12 @@ export class PersonalOpsService {
         targetId: sanitizeSourceRef(source),
         urgency: 'inline',
         prompt: `How should I treat "${source.title}"?`,
-        rationale: sourceWhyReview(source).join(' • ') || 'This item is affecting triage with low confidence.',
+        rationale:
+          sourceWhyReview(source).join(' • ') ||
+          'This item is affecting triage with low confidence.',
         recommendedOptionId:
-          sourceAttention(source).actionRequired || sourceAttention(source).operationalRisk
+          sourceAttention(source).actionRequired ||
+          sourceAttention(source).operationalRisk
             ? 'needs_action'
             : 'awareness_only',
         options: [
@@ -5165,13 +5726,15 @@ export class PersonalOpsService {
             id: 'needs_action',
             label: 'Keep in Needs Action',
             scope: 'current_item',
-            effectSummary: 'Keep the item visible as something Jerry likely needs to handle.',
+            effectSummary:
+              'Keep the item visible as something Jerry likely needs to handle.',
           },
           {
             id: 'awareness_only',
             label: 'Mark awareness only',
             scope: 'current_item',
-            effectSummary: 'Move it out of the action lane but preserve visibility.',
+            effectSummary:
+              'Move it out of the action lane but preserve visibility.',
           },
           {
             id: 'suppress',
@@ -5180,7 +5743,8 @@ export class PersonalOpsService {
             effectSummary: 'Hide this specific item from summaries and triage.',
           },
         ],
-        effectPreview: 'Your answer will update this item immediately and reduce future uncertainty for similar cases.',
+        effectPreview:
+          'Your answer will update this item immediately and reduce future uncertainty for similar cases.',
         createdFrom: `source_triage:${sanitizeSourceRef(source)}`,
       }));
   }
@@ -5196,7 +5760,8 @@ export class PersonalOpsService {
         targetId: item.id,
         urgency: 'inline',
         prompt: `Should "${item.title}" stay on the Work board?`,
-        rationale: item.notes || 'This inferred task is still marked for review.',
+        rationale:
+          item.notes || 'This inferred task is still marked for review.',
         recommendedOptionId: 'keep_work_item',
         options: [
           {
@@ -5209,7 +5774,8 @@ export class PersonalOpsService {
             id: 'remove_work_item',
             label: 'Remove it',
             scope: 'one_off',
-            effectSummary: 'Mark it ignored so it no longer clutters active work.',
+            effectSummary:
+              'Mark it ignored so it no longer clutters active work.',
           },
         ],
         effectPreview: 'This will update the current open loop immediately.',
@@ -5228,33 +5794,44 @@ export class PersonalOpsService {
         targetId: sanitizeSourceRef(source),
         urgency: 'inline',
         prompt: `Is "${source.title}" a reminder or a real meeting?`,
-        rationale: 'The calendar item looks ambiguous, and the answer changes whether the assistant should prep or just remind.',
+        rationale:
+          'The calendar item looks ambiguous, and the answer changes whether the assistant should prep or just remind.',
         recommendedOptionId: 'reminder',
         options: [
           {
             id: 'reminder',
             label: 'It is a reminder',
             scope: 'current_item',
-            effectSummary: 'Treat it like a reminder, not a meeting prep candidate.',
+            effectSummary:
+              'Treat it like a reminder, not a meeting prep candidate.',
           },
           {
             id: 'meeting',
             label: 'It is a meeting',
             scope: 'current_item',
-            effectSummary: 'Keep treating it like a meeting with prep context when relevant.',
+            effectSummary:
+              'Keep treating it like a meeting with prep context when relevant.',
           },
         ],
-        effectPreview: 'This will update the current calendar item and future prep behavior for it.',
+        effectPreview:
+          'This will update the current calendar item and future prep behavior for it.',
         createdFrom: `calendar_intent:${sanitizeSourceRef(source)}`,
       }));
   }
 
   private buildReviewAssistantQuestions(): AssistantQuestionCandidate[] {
-    const clients = new Map(this.getClients().map((client) => [client.id, client]));
-    const projects = new Map(this.getProjects().map((project) => [project.id, project]));
+    const clients = new Map(
+      this.getClients().map((client) => [client.id, client]),
+    );
+    const projects = new Map(
+      this.getProjects().map((project) => [project.id, project]),
+    );
     const candidates: AssistantQuestionCandidate[] = [];
 
-    for (const hint of listAccountScopedContactHints({ status: 'suggested', limit: 40 })) {
+    for (const hint of listAccountScopedContactHints({
+      status: 'suggested',
+      limit: 40,
+    })) {
       const contact = getContact(hint.contactId);
       const client = hint.clientId ? clients.get(hint.clientId) : null;
       const project = hint.projectId ? projects.get(hint.projectId) : null;
@@ -5279,7 +5856,8 @@ export class PersonalOpsService {
                 id: 'client_only',
                 label: `Keep ${client?.name || 'client'} client-only`,
                 scope: 'account_hint',
-                effectSummary: 'Use the client for this account, but do not harden a project hint yet.',
+                effectSummary:
+                  'Use the client for this account, but do not harden a project hint yet.',
               },
               {
                 id: 'reject_hint',
@@ -5302,15 +5880,23 @@ export class PersonalOpsService {
                 effectSummary: 'Do not reuse this account-scoped mapping.',
               },
             ],
-        effectPreview: 'This answer will change how this sender is treated in this specific account without forcing a global cross-client default.',
+        effectPreview:
+          'This answer will change how this sender is treated in this specific account without forcing a global cross-client default.',
         createdFrom: `account_hint:${hint.id}`,
       });
     }
 
-    for (const suggestion of listContactMappingSuggestions({ status: 'suggested', limit: 40 })) {
+    for (const suggestion of listContactMappingSuggestions({
+      status: 'suggested',
+      limit: 40,
+    })) {
       const contact = getContact(suggestion.contactId);
-      const client = suggestion.clientId ? clients.get(suggestion.clientId) : null;
-      const project = suggestion.projectId ? projects.get(suggestion.projectId) : null;
+      const client = suggestion.clientId
+        ? clients.get(suggestion.clientId)
+        : null;
+      const project = suggestion.projectId
+        ? projects.get(suggestion.projectId)
+        : null;
       candidates.push({
         dedupeKey: `contact_mapping:${suggestion.id}`,
         surface: 'review',
@@ -5319,7 +5905,8 @@ export class PersonalOpsService {
         urgency: 'queued',
         prompt: `Should ${contact?.name || 'this contact'} usually map to ${project?.name || client?.name || 'this client'}?`,
         rationale: `${suggestion.basis} • ${suggestion.occurrenceCount} observed match${suggestion.occurrenceCount === 1 ? '' : 'es'}`,
-        recommendedOptionId: suggestion.confidence >= 0.8 ? 'accept_mapping' : 'reject_mapping',
+        recommendedOptionId:
+          suggestion.confidence >= 0.8 ? 'accept_mapping' : 'reject_mapping',
         options: [
           {
             id: 'accept_mapping',
@@ -5334,7 +5921,8 @@ export class PersonalOpsService {
             effectSummary: 'Keep this mapping out of future defaults.',
           },
         ],
-        effectPreview: 'This will either promote or reject the suggested contact mapping.',
+        effectPreview:
+          'This will either promote or reject the suggested contact mapping.',
         createdFrom: `contact_mapping:${suggestion.id}`,
       });
     }
@@ -5347,8 +5935,10 @@ export class PersonalOpsService {
         targetId: fact.contactId,
         urgency: 'queued',
         prompt: `Should I keep this memory: ${fact.label}?`,
-        rationale: fact.provenance.join(' • ') || 'Suggested durable memory fact.',
-        recommendedOptionId: fact.confidence >= 0.82 ? 'accept_memory' : 'reject_memory',
+        rationale:
+          fact.provenance.join(' • ') || 'Suggested durable memory fact.',
+        recommendedOptionId:
+          fact.confidence >= 0.82 ? 'accept_memory' : 'reject_memory',
         options: [
           {
             id: 'accept_memory',
@@ -5360,10 +5950,12 @@ export class PersonalOpsService {
             id: 'reject_memory',
             label: 'Reject',
             scope: 'memory_review',
-            effectSummary: 'Stop this fact from hardening into future behavior.',
+            effectSummary:
+              'Stop this fact from hardening into future behavior.',
           },
         ],
-        effectPreview: 'This will update the memory layer and future triage behavior.',
+        effectPreview:
+          'This will update the memory layer and future triage behavior.',
         createdFrom: `memory:${fact.id}`,
       });
     }
@@ -5383,19 +5975,23 @@ export class PersonalOpsService {
 
   private syncAssistantQuestions(): void {
     const existing = new Map(
-      listAssistantQuestions({ includeSnoozed: true, limit: 500 }).map((question) => [
-        question.dedupeKey,
-        question,
-      ]),
+      listAssistantQuestions({ includeSnoozed: true, limit: 500 }).map(
+        (question) => [question.dedupeKey, question],
+      ),
     );
     const candidates = this.buildAssistantQuestionCandidates();
-    const activeKeys = new Set(candidates.map((candidate) => candidate.dedupeKey));
+    const activeKeys = new Set(
+      candidates.map((candidate) => candidate.dedupeKey),
+    );
     for (const candidate of candidates) {
       const persisted = existing.get(candidate.dedupeKey);
       upsertAssistantQuestion({
         ...candidate,
         id: persisted?.id,
-        status: persisted?.status === 'dismissed' ? 'dismissed' : persisted?.status || 'pending',
+        status:
+          persisted?.status === 'dismissed'
+            ? 'dismissed'
+            : persisted?.status || 'pending',
         answerOptionId: persisted?.answerOptionId ?? null,
         answerValue: persisted?.answerValue ?? null,
         snoozeUntil: persisted?.snoozeUntil ?? null,
@@ -5403,7 +5999,8 @@ export class PersonalOpsService {
       });
     }
     for (const question of existing.values()) {
-      if (question.status !== 'pending' && question.status !== 'snoozed') continue;
+      if (question.status !== 'pending' && question.status !== 'snoozed')
+        continue;
       if (activeKeys.has(question.dedupeKey)) continue;
       upsertAssistantQuestion({
         ...question,
@@ -5421,30 +6018,34 @@ export class PersonalOpsService {
   }): AssistantQuestion[] {
     this.syncAssistantQuestions();
     const now = Date.now();
-    let questions = listAssistantQuestions({ includeSnoozed: true, limit: 500 }).filter(
-      (question) => {
-        if (question.status === 'answered' || question.status === 'dismissed') return false;
-        if (
-          question.status === 'snoozed' &&
-          question.snoozeUntil &&
-          new Date(question.snoozeUntil).getTime() > now
-        ) {
-          return false;
-        }
-        if (input?.surface && question.surface !== input.surface) return false;
-        if (input?.targetType && question.targetType !== input.targetType) return false;
-        if (input?.targetId && question.targetId !== input.targetId) return false;
-        if (input?.urgency && question.urgency !== input.urgency) return false;
-        return true;
-      },
-    );
+    let questions = listAssistantQuestions({
+      includeSnoozed: true,
+      limit: 500,
+    }).filter((question) => {
+      if (question.status === 'answered' || question.status === 'dismissed')
+        return false;
+      if (
+        question.status === 'snoozed' &&
+        question.snoozeUntil &&
+        new Date(question.snoozeUntil).getTime() > now
+      ) {
+        return false;
+      }
+      if (input?.surface && question.surface !== input.surface) return false;
+      if (input?.targetType && question.targetType !== input.targetType)
+        return false;
+      if (input?.targetId && question.targetId !== input.targetId) return false;
+      if (input?.urgency && question.urgency !== input.urgency) return false;
+      return true;
+    });
     questions = questions.sort((left, right) => {
       if (input?.targetId) {
         const leftMatch = left.targetId === input.targetId ? 1 : 0;
         const rightMatch = right.targetId === input.targetId ? 1 : 0;
         if (leftMatch !== rightMatch) return rightMatch - leftMatch;
       }
-      if (left.urgency !== right.urgency) return left.urgency === 'inline' ? -1 : 1;
+      if (left.urgency !== right.urgency)
+        return left.urgency === 'inline' ? -1 : 1;
       return (right.updatedAt || '').localeCompare(left.updatedAt || '');
     });
     if ((input?.urgency || null) === 'inline') {
@@ -5462,14 +6063,21 @@ export class PersonalOpsService {
     if (!question) {
       throw new Error('Question not found.');
     }
-    const optionId = input.optionId || question.recommendedOptionId || question.options[0]?.id || null;
+    const optionId =
+      input.optionId ||
+      question.recommendedOptionId ||
+      question.options[0]?.id ||
+      null;
     const answerValue = input.value?.trim() || null;
     if (
       question.createdFrom.startsWith('setup_default|') ||
       question.createdFrom.startsWith('setup_project|')
     ) {
-      const [, connectionKey, clientId, projectId] = question.createdFrom.split('|');
-      const connection = this.listConnections().find((entry) => entry.connectionKey === connectionKey);
+      const [, connectionKey, clientId, projectId] =
+        question.createdFrom.split('|');
+      const connection = this.listConnections().find(
+        (entry) => entry.connectionKey === connectionKey,
+      );
       if (!connection || !connection.accountId) {
         throw new Error('Connected account not found.');
       }
@@ -5489,7 +6097,9 @@ export class PersonalOpsService {
       );
     } else if (question.createdFrom.startsWith('setup_guidance|')) {
       const [, connectionKey] = question.createdFrom.split('|');
-      const connection = this.listConnections().find((entry) => entry.connectionKey === connectionKey);
+      const connection = this.listConnections().find(
+        (entry) => entry.connectionKey === connectionKey,
+      );
       if (!connection || !connection.accountId) {
         throw new Error('Connected account not found.');
       }
@@ -5505,7 +6115,12 @@ export class PersonalOpsService {
       const sourceRef = question.createdFrom.replace('source_triage:', '');
       const parsed = parseSourceRecordKey(sourceRef);
       if (!parsed) throw new Error('Source record not found.');
-      const source = getSourceRecord(parsed.provider, parsed.accountId, parsed.kind, parsed.externalId);
+      const source = getSourceRecord(
+        parsed.provider,
+        parsed.accountId,
+        parsed.kind,
+        parsed.externalId,
+      );
       if (!source) throw new Error('Source record not found.');
       const attention = sourceAttention(source);
       if (optionId === 'needs_action') {
@@ -5560,16 +6175,23 @@ export class PersonalOpsService {
         ...item,
         needsReview: false,
         status: optionId === 'remove_work_item' ? 'ignored' : item.status,
-        openLoopState: optionId === 'remove_work_item' ? 'closed' : item.openLoopState,
+        openLoopState:
+          optionId === 'remove_work_item' ? 'closed' : item.openLoopState,
       });
       if (item.sourceRecordKey) {
         const parsed = parseSourceRecordKey(item.sourceRecordKey);
         if (parsed) {
-          const source = getSourceRecord(parsed.provider, parsed.accountId, parsed.kind, parsed.externalId);
+          const source = getSourceRecord(
+            parsed.provider,
+            parsed.accountId,
+            parsed.kind,
+            parsed.externalId,
+          );
           if (source) {
             source.metadata = {
               ...(source.metadata || {}),
-              workItemStatusOverride: optionId === 'remove_work_item' ? 'ignored' : 'open',
+              workItemStatusOverride:
+                optionId === 'remove_work_item' ? 'ignored' : 'open',
             };
             this.reprocessStoredSource(source);
           }
@@ -5579,7 +6201,12 @@ export class PersonalOpsService {
       const sourceRef = question.createdFrom.replace('calendar_intent:', '');
       const parsed = parseSourceRecordKey(sourceRef);
       if (!parsed) throw new Error('Calendar event not found.');
-      const source = getSourceRecord(parsed.provider, parsed.accountId, parsed.kind, parsed.externalId);
+      const source = getSourceRecord(
+        parsed.provider,
+        parsed.accountId,
+        parsed.kind,
+        parsed.externalId,
+      );
       if (!source) throw new Error('Calendar event not found.');
       source.metadata = {
         ...(source.metadata || {}),
@@ -5589,7 +6216,9 @@ export class PersonalOpsService {
       this.reprocessStoredSource(source);
     } else if (question.createdFrom.startsWith('account_hint:')) {
       const hintId = question.createdFrom.replace('account_hint:', '');
-      const hint = listAccountScopedContactHints({ limit: 400 }).find((entry) => entry.id === hintId);
+      const hint = listAccountScopedContactHints({ limit: 400 }).find(
+        (entry) => entry.id === hintId,
+      );
       if (!hint) throw new Error('Account-scoped hint not found.');
       upsertAccountScopedContactHint({
         ...hint,
@@ -5600,12 +6229,16 @@ export class PersonalOpsService {
           identityValue: hint.identityValue,
           clientId: optionId === 'reject_hint' ? null : hint.clientId,
           projectId:
-            optionId === 'client_only' || optionId === 'reject_hint' ? null : hint.projectId,
+            optionId === 'client_only' || optionId === 'reject_hint'
+              ? null
+              : hint.projectId,
           basis: hint.basis,
         }),
         clientId: optionId === 'reject_hint' ? null : hint.clientId,
         projectId:
-          optionId === 'client_only' || optionId === 'reject_hint' ? null : hint.projectId,
+          optionId === 'client_only' || optionId === 'reject_hint'
+            ? null
+            : hint.projectId,
         status: optionId === 'reject_hint' ? 'rejected' : 'accepted',
       });
       this.reprocessStoredSources({
@@ -5648,7 +6281,9 @@ export class PersonalOpsService {
       throw new Error('Question not found.');
     }
     const snoozeUntil =
-      input.reason === 'not_now' ? new Date(Date.now() + 4 * 60 * 60_000).toISOString() : null;
+      input.reason === 'not_now'
+        ? new Date(Date.now() + 4 * 60 * 60_000).toISOString()
+        : null;
     const updated = upsertAssistantQuestion({
       ...question,
       dedupeKey: question.dedupeKey,
@@ -5656,7 +6291,10 @@ export class PersonalOpsService {
       snoozeUntil,
       answerOptionId: question.answerOptionId,
       answerValue: question.answerValue,
-      answeredAt: input.reason === 'not_now' ? question.answeredAt : new Date().toISOString(),
+      answeredAt:
+        input.reason === 'not_now'
+          ? question.answeredAt
+          : new Date().toISOString(),
     });
     this.writePublicSnapshots();
     return updated;
@@ -5703,10 +6341,14 @@ export class PersonalOpsService {
     for (const [key, bucket] of grouped.entries()) {
       if (bucket.count < 3) continue;
       const account = this.listConnections().find(
-        (entry) => entry.provider === bucket.provider && (entry.accountId || 'default') === bucket.accountId,
+        (entry) =>
+          entry.provider === bucket.provider &&
+          (entry.accountId || 'default') === bucket.accountId,
       );
       const accountLabel =
-        account?.accountLabel || account?.accountId || `${bucket.provider}:${bucket.accountId}`;
+        account?.accountLabel ||
+        account?.accountId ||
+        `${bucket.provider}:${bucket.accountId}`;
       const title =
         bucket.field === 'awarenessOnly'
           ? `Reduce repeated awareness-only corrections for ${accountLabel}`
@@ -5743,7 +6385,9 @@ export class PersonalOpsService {
   }
 
   approveImprovementTicket(id: string): ImprovementTicket {
-    const ticket = this.getImprovementTickets().find((entry) => entry.id === id);
+    const ticket = this.getImprovementTickets().find(
+      (entry) => entry.id === id,
+    );
     if (!ticket) {
       throw new Error('Improvement ticket not found.');
     }
@@ -5758,7 +6402,9 @@ export class PersonalOpsService {
   }
 
   rejectImprovementTicket(id: string): ImprovementTicket {
-    const ticket = this.getImprovementTickets().find((entry) => entry.id === id);
+    const ticket = this.getImprovementTickets().find(
+      (entry) => entry.id === id,
+    );
     if (!ticket) {
       throw new Error('Improvement ticket not found.');
     }
@@ -5789,7 +6435,9 @@ export class PersonalOpsService {
       >
     >,
   ): ImprovementTicket {
-    const ticket = this.getImprovementTickets().find((entry) => entry.id === id);
+    const ticket = this.getImprovementTickets().find(
+      (entry) => entry.id === id,
+    );
     if (!ticket) {
       throw new Error('Improvement ticket not found.');
     }
@@ -5802,7 +6450,8 @@ export class PersonalOpsService {
       desiredBehavior: input.desiredBehavior?.trim() || ticket.desiredBehavior,
       userValue: input.userValue?.trim() || ticket.userValue,
       acceptanceCriteria:
-        input.acceptanceCriteria?.filter((entry) => entry.trim()) || ticket.acceptanceCriteria,
+        input.acceptanceCriteria?.filter((entry) => entry.trim()) ||
+        ticket.acceptanceCriteria,
       suggestedSurface: input.suggestedSurface ?? ticket.suggestedSurface,
       suggestedSubsystem: input.suggestedSubsystem ?? ticket.suggestedSubsystem,
       notes: input.notes ?? ticket.notes,
@@ -5847,7 +6496,9 @@ export class PersonalOpsService {
         sourceRecordKey: item.sourceRecordKey,
         workstreamKey:
           workstreamKeyByRef.get(item.id) ||
-          (item.sourceRecordKey ? workstreamKeyByRef.get(item.sourceRecordKey) || null : null),
+          (item.sourceRecordKey
+            ? workstreamKeyByRef.get(item.sourceRecordKey) || null
+            : null),
         linkedContactIds: item.linkedContactIds,
         needsReview: item.needsReview,
         dueAt: item.dueDate,
@@ -5856,13 +6507,20 @@ export class PersonalOpsService {
     }
 
     for (const source of sourceByKey.values()) {
-      if (source.kind === 'calendar_event' || source.kind === 'manual_note') continue;
+      if (source.kind === 'calendar_event' || source.kind === 'manual_note')
+        continue;
       const attention = sourceAttention(source);
       const reviewState = sourceReviewState(source);
-      const hasWorkItem = Boolean(getWorkItem(`work:${sanitizeSourceRef(source)}`));
+      const hasWorkItem = Boolean(
+        getWorkItem(`work:${sanitizeSourceRef(source)}`),
+      );
       if (hasWorkItem && reviewState !== 'suggested') continue;
       if (!attention.awarenessOnly && reviewState !== 'suggested') continue;
-      if (!attention.reportWorthy && !attention.operationalRisk && reviewState !== 'suggested') {
+      if (
+        !attention.reportWorthy &&
+        !attention.operationalRisk &&
+        reviewState !== 'suggested'
+      ) {
         continue;
       }
       loops.push({
@@ -5870,7 +6528,8 @@ export class PersonalOpsService {
         kind: reviewState === 'suggested' ? 'review' : 'awareness',
         state: reviewState === 'suggested' ? 'action' : 'awareness',
         title: source.title,
-        summary: attention.importanceReason || source.summary || 'Attention item',
+        summary:
+          attention.importanceReason || source.summary || 'Attention item',
         priority: clampPriority(source.priority),
         confidence:
           attention.actionConfidence ??
@@ -5881,9 +6540,11 @@ export class PersonalOpsService {
         projectId: source.projectId || null,
         workItemId: hasWorkItem ? `work:${sanitizeSourceRef(source)}` : null,
         sourceRecordKey: sanitizeSourceRef(source),
-        workstreamKey: workstreamKeyByRef.get(sanitizeSourceRef(source)) || null,
+        workstreamKey:
+          workstreamKeyByRef.get(sanitizeSourceRef(source)) || null,
         linkedContactIds:
-          source.linkedContactIds || sourceMetadataStringArray(source, 'linkedContactIds'),
+          source.linkedContactIds ||
+          sourceMetadataStringArray(source, 'linkedContactIds'),
         needsReview: reviewState === 'suggested',
         dueAt: source.dueAt || null,
         lastUpdatedAt: latestIso(source.occurredAt, source.syncedAt),
@@ -5892,7 +6553,8 @@ export class PersonalOpsService {
 
     return loops
       .sort((a, b) => {
-        const priorityDiff = inboxPriorityRank(b.priority) - inboxPriorityRank(a.priority);
+        const priorityDiff =
+          inboxPriorityRank(b.priority) - inboxPriorityRank(a.priority);
         if (priorityDiff !== 0) return priorityDiff;
         if (a.needsReview !== b.needsReview) return a.needsReview ? -1 : 1;
         return (b.lastUpdatedAt || '').localeCompare(a.lastUpdatedAt || '');
@@ -5901,19 +6563,33 @@ export class PersonalOpsService {
   }
 
   getReviewQueue(): ReviewQueueItem[] {
-    const clients = new Map(this.getClients().map((client) => [client.id, client]));
-    const projects = new Map(this.getProjects().map((project) => [project.id, project]));
+    const clients = new Map(
+      this.getClients().map((client) => [client.id, client]),
+    );
+    const projects = new Map(
+      this.getProjects().map((project) => [project.id, project]),
+    );
     const queue: ReviewQueueItem[] = [];
 
-    for (const suggestion of listContactMappingSuggestions({ status: 'suggested', limit: 100 })) {
+    for (const suggestion of listContactMappingSuggestions({
+      status: 'suggested',
+      limit: 100,
+    })) {
       const contact = getContact(suggestion.contactId);
-      const client = suggestion.clientId ? clients.get(suggestion.clientId) : null;
-      const project = suggestion.projectId ? projects.get(suggestion.projectId) : null;
+      const client = suggestion.clientId
+        ? clients.get(suggestion.clientId)
+        : null;
+      const project = suggestion.projectId
+        ? projects.get(suggestion.projectId)
+        : null;
       queue.push({
         id: `contact_mapping:${suggestion.id}`,
         kind: 'contact_mapping',
         title: contact ? contact.name : 'Contact mapping',
-        summary: [client?.name || 'Unassigned client', project?.name || 'Client-level'].join(' / '),
+        summary: [
+          client?.name || 'Unassigned client',
+          project?.name || 'Client-level',
+        ].join(' / '),
         confidence: suggestion.confidence,
         status: suggestion.status,
         clientId: suggestion.clientId,
@@ -5921,7 +6597,10 @@ export class PersonalOpsService {
         contactId: suggestion.contactId,
         sourceRecordKey: null,
         workItemId: null,
-        reasons: [suggestion.basis, `${suggestion.occurrenceCount} observed match${suggestion.occurrenceCount === 1 ? '' : 'es'}`],
+        reasons: [
+          suggestion.basis,
+          `${suggestion.occurrenceCount} observed match${suggestion.occurrenceCount === 1 ? '' : 'es'}`,
+        ],
         createdAt: suggestion.createdAt,
         updatedAt: suggestion.updatedAt,
       });
@@ -5933,7 +6612,10 @@ export class PersonalOpsService {
         id: `source_record:${sanitizeSourceRef(source)}`,
         kind: 'source_record',
         title: source.title,
-        summary: sourceAttention(source).importanceReason || source.summary || 'Low-confidence source attribution',
+        summary:
+          sourceAttention(source).importanceReason ||
+          source.summary ||
+          'Low-confidence source attribution',
         confidence:
           sourceAttention(source).actionConfidence ??
           sourceAttention(source).mappingConfidence ??
@@ -5965,7 +6647,10 @@ export class PersonalOpsService {
         contactId: null,
         sourceRecordKey: item.sourceRecordKey,
         workItemId: item.id,
-        reasons: ['Low-confidence inferred task', `Open-loop state: ${item.openLoopState}`],
+        reasons: [
+          'Low-confidence inferred task',
+          `Open-loop state: ${item.openLoopState}`,
+        ],
         createdAt: item.createdAt,
         updatedAt: item.updatedAt,
       });
@@ -6002,7 +6687,12 @@ export class PersonalOpsService {
     } else if (id.startsWith('source_record:')) {
       const parsed = parseSourceRecordKey(id.replace('source_record:', ''));
       if (!parsed) throw new Error('Review item not found.');
-      const source = getSourceRecord(parsed.provider, parsed.accountId, parsed.kind, parsed.externalId);
+      const source = getSourceRecord(
+        parsed.provider,
+        parsed.accountId,
+        parsed.kind,
+        parsed.externalId,
+      );
       if (!source) throw new Error('Review item not found.');
       source.reviewState = 'accepted';
       source.metadata = {
@@ -6033,7 +6723,12 @@ export class PersonalOpsService {
     } else if (id.startsWith('source_record:')) {
       const parsed = parseSourceRecordKey(id.replace('source_record:', ''));
       if (!parsed) throw new Error('Review item not found.');
-      const source = getSourceRecord(parsed.provider, parsed.accountId, parsed.kind, parsed.externalId);
+      const source = getSourceRecord(
+        parsed.provider,
+        parsed.accountId,
+        parsed.kind,
+        parsed.externalId,
+      );
       if (!source) throw new Error('Review item not found.');
       const attention = sourceAttention(source);
       source.reviewState = 'rejected';
@@ -6097,14 +6792,15 @@ export class PersonalOpsService {
     })
       .map(normalizeSourceForView)
       .filter(
-        (record) =>
-          record.kind === 'email' || record.kind === 'slack_message',
+        (record) => record.kind === 'email' || record.kind === 'slack_message',
       )
       .filter((record) => input.includeNoise || !isLikelyNoiseEmail(record))
       .sort((a, b) => {
         const score = inboxSortScore(b) - inboxSortScore(a);
         if (score !== 0) return score;
-        return new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime();
+        return (
+          new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
+        );
       })
       .slice(0, input.limit);
   }
@@ -6144,7 +6840,10 @@ export class PersonalOpsService {
     });
   }
 
-  getHistoryWorkstreams(input?: { since?: string; until?: string }): PersonalOpsWorkstream[] {
+  getHistoryWorkstreams(input?: {
+    since?: string;
+    until?: string;
+  }): PersonalOpsWorkstream[] {
     return this.buildWorkstreams({
       since: input?.since || plusDays(new Date(), -7).toISOString(),
       until: input?.until,
@@ -6174,7 +6873,10 @@ export class PersonalOpsService {
     const facts = {
       today: this.getTodayView(),
       workboard: this.getWorkboardView().slice(0, 8),
-      history: this.getHistoryView({ since: rangeStart, until: rangeEnd }).slice(0, 20),
+      history: this.getHistoryView({
+        since: rangeStart,
+        until: rangeEnd,
+      }).slice(0, 20),
       reports: listReportSnapshots(undefined, 6),
     };
 
@@ -6200,9 +6902,12 @@ export class PersonalOpsService {
   private collectReportReferences(facts: Record<string, unknown>): string[] {
     const refs = new Set<string>();
     const today = facts.today as PersonalOpsTodaySummary | undefined;
-    for (const source of today?.meetings || []) refs.add(sanitizeSourceRef(source));
-    for (const source of today?.inbox || []) refs.add(sanitizeSourceRef(source));
-    for (const source of today?.awareness || []) refs.add(sanitizeSourceRef(source));
+    for (const source of today?.meetings || [])
+      refs.add(sanitizeSourceRef(source));
+    for (const source of today?.inbox || [])
+      refs.add(sanitizeSourceRef(source));
+    for (const source of today?.awareness || [])
+      refs.add(sanitizeSourceRef(source));
     for (const stream of today?.workstreams || []) {
       for (const source of stream.sourceRecords || []) {
         refs.add(sanitizeSourceRef(source));
@@ -6225,7 +6930,9 @@ export class PersonalOpsService {
 
   private renderStandupFromCurrentState(): string {
     const buckets = this.getWorkboardView();
-    const recentHistory = this.getHistoryView({ since: plusDays(new Date(), -1).toISOString() });
+    const recentHistory = this.getHistoryView({
+      since: plusDays(new Date(), -1).toISOString(),
+    });
     if (buckets.length === 0) return 'No current work tracked yet.';
     return buckets
       .slice(0, 8)
@@ -6252,7 +6959,9 @@ export class PersonalOpsService {
             .map((source) => `- ${source.title}`),
         ].slice(0, 3);
         const inProgress = bucket.items
-          .filter((item) => item.status === 'in_progress' || item.status === 'open')
+          .filter(
+            (item) => item.status === 'in_progress' || item.status === 'open',
+          )
           .slice(0, 3)
           .map((item) => `- ${item.title}`);
         const blockers = bucket.items
@@ -6263,7 +6972,9 @@ export class PersonalOpsService {
           header,
           'Completed:',
           ...(completed.length ? completed : ['- No completed work logged.']),
-          ...(commitHours > 0 ? [`Estimated commit time: ${commitHours.toFixed(1)}h`] : []),
+          ...(commitHours > 0
+            ? [`Estimated commit time: ${commitHours.toFixed(1)}h`]
+            : []),
           'In progress / next:',
           ...(inProgress.length ? inProgress : ['- Nothing active.']),
           'Blockers:',
@@ -6286,16 +6997,21 @@ export class PersonalOpsService {
         'Morning Brief',
         '',
         `Meetings today: ${today.meetings.length}`,
-        ...today.meetings.slice(0, 5).map(
-          (meeting) => `- ${meeting.title} @ ${formatDateTime(meeting.occurredAt)}`,
-        ),
+        ...today.meetings
+          .slice(0, 5)
+          .map(
+            (meeting) =>
+              `- ${meeting.title} @ ${formatDateTime(meeting.occurredAt)}`,
+          ),
         '',
         'Top priorities:',
         ...today.priorities.slice(0, 5).map((item) => `- ${item.title}`),
         '',
         'Open loops:',
         ...(today.openLoops.length
-          ? today.openLoops.slice(0, 5).map((loop) => `- ${loop.title} (${loop.state})`)
+          ? today.openLoops
+              .slice(0, 5)
+              .map((loop) => `- ${loop.title} (${loop.state})`)
           : ['- None']),
         '',
         'Important awareness:',
@@ -6307,7 +7023,10 @@ export class PersonalOpsService {
         ...(today.workstreams.length
           ? today.workstreams
               .slice(0, 4)
-              .map((stream) => `- ${[stream.client?.name || 'Unassigned client', stream.project?.name || 'General work'].join(' / ')}${stream.signals.length ? ` (${stream.signals.join('; ')})` : ''}`)
+              .map(
+                (stream) =>
+                  `- ${[stream.client?.name || 'Unassigned client', stream.project?.name || 'General work'].join(' / ')}${stream.signals.length ? ` (${stream.signals.join('; ')})` : ''}`,
+              )
           : ['- None yet']),
         '',
         'Overdue:',
@@ -6327,7 +7046,9 @@ export class PersonalOpsService {
         '',
         'Moved forward today:',
         ...history.slice(0, 8).map((activity) => `- ${activity.summary}`),
-        ...(commitHours > 0 ? ['', `Estimated commit time: ${commitHours.toFixed(1)}h`] : []),
+        ...(commitHours > 0
+          ? ['', `Estimated commit time: ${commitHours.toFixed(1)}h`]
+          : []),
         '',
         'Still open:',
         ...today.priorities.slice(0, 5).map((item) => `- ${item.title}`),
@@ -6341,7 +7062,13 @@ export class PersonalOpsService {
     if (reportType === 'history' || reportType === 'what_changed') {
       const history = facts.history as Activity[];
       return history.length
-        ? history.slice(0, 20).map((activity) => `- ${formatDateTime(activity.timestamp)} ${activity.summary}`).join('\n')
+        ? history
+            .slice(0, 20)
+            .map(
+              (activity) =>
+                `- ${formatDateTime(activity.timestamp)} ${activity.summary}`,
+            )
+            .join('\n')
         : 'No activity found for that period.';
     }
     return this.renderStandupFromCurrentState();
@@ -6356,7 +7083,12 @@ export class PersonalOpsService {
           '',
           'Meetings:',
           ...(view.meetings.length
-            ? view.meetings.slice(0, 5).map((meeting) => `- ${meeting.title} @ ${formatDateTime(meeting.occurredAt)}`)
+            ? view.meetings
+                .slice(0, 5)
+                .map(
+                  (meeting) =>
+                    `- ${meeting.title} @ ${formatDateTime(meeting.occurredAt)}`,
+                )
             : ['- None']),
           '',
           'Must do:',
@@ -6366,12 +7098,16 @@ export class PersonalOpsService {
           '',
           'Open loops:',
           ...(view.openLoops.length
-            ? view.openLoops.slice(0, 5).map((loop) => `- ${loop.title} (${loop.state})`)
+            ? view.openLoops
+                .slice(0, 5)
+                .map((loop) => `- ${loop.title} (${loop.state})`)
             : ['- None']),
           '',
           'Pending approvals:',
           ...(view.approvalQueue.length
-            ? view.approvalQueue.slice(0, 4).map((item) => `- ${item.title} (${item.kind})`)
+            ? view.approvalQueue
+                .slice(0, 4)
+                .map((item) => `- ${item.title} (${item.kind})`)
             : ['- None']),
           '',
           'Important awareness:',
@@ -6382,8 +7118,10 @@ export class PersonalOpsService {
           'Active workstreams:',
           ...(view.workstreams.length
             ? view.workstreams.slice(0, 4).map((stream) => {
-                const label = [stream.client?.name || 'Unassigned client', stream.project?.name || 'General work']
-                  .join(' / ');
+                const label = [
+                  stream.client?.name || 'Unassigned client',
+                  stream.project?.name || 'General work',
+                ].join(' / ');
                 return `- ${label}${stream.signals.length ? ` (${stream.signals.join('; ')})` : ''}`;
               })
             : ['- No grouped workstreams yet.']),
@@ -6402,7 +7140,9 @@ export class PersonalOpsService {
           ...(inbox.length
             ? inbox.map((item) => {
                 const account = item.accountLabel || item.accountId;
-                const suffix = account ? `${item.provider}/${account}` : item.provider;
+                const suffix = account
+                  ? `${item.provider}/${account}`
+                  : item.provider;
                 return `- ${item.title} [${suffix}]`;
               })
             : ['No recent email items found.']),
@@ -6423,27 +7163,50 @@ export class PersonalOpsService {
         ].join('\n');
       }
       case '/standup':
-        return this.getLatestReport('standup')?.groupedOutput || this.renderStandupFromCurrentState();
+        return (
+          this.getLatestReport('standup')?.groupedOutput ||
+          this.renderStandupFromCurrentState()
+        );
       case '/wrap':
-        return this.getLatestReport('wrap')?.groupedOutput || 'No end-of-day wrap has been generated yet.';
+        return (
+          this.getLatestReport('wrap')?.groupedOutput ||
+          'No end-of-day wrap has been generated yet.'
+        );
       case '/history': {
         const history = this.getHistoryView({
-          since: args.trim() ? new Date(args.trim()).toISOString() : plusDays(new Date(), -1).toISOString(),
+          since: args.trim()
+            ? new Date(args.trim()).toISOString()
+            : plusDays(new Date(), -1).toISOString(),
         }).slice(0, 15);
         return history.length
-          ? history.map((activity) => `- ${formatDateTime(activity.timestamp)} ${activity.summary}`).join('\n')
+          ? history
+              .map(
+                (activity) =>
+                  `- ${formatDateTime(activity.timestamp)} ${activity.summary}`,
+              )
+              .join('\n')
           : 'No recent activity found.';
       }
       case '/what-changed': {
-        const changes = this.getHistoryView({ since: plusDays(new Date(), -1).toISOString() }).slice(0, 12);
+        const changes = this.getHistoryView({
+          since: plusDays(new Date(), -1).toISOString(),
+        }).slice(0, 12);
         return changes.length
-          ? ['What changed since yesterday', '', ...changes.map((activity) => `- ${activity.summary}`)].join('\n')
+          ? [
+              'What changed since yesterday',
+              '',
+              ...changes.map((activity) => `- ${activity.summary}`),
+            ].join('\n')
           : 'No changes tracked since yesterday.';
       }
       case '/followups': {
         const followups = this.getTodayView().followUps;
         return followups.length
-          ? ['Follow-ups', '', ...followups.map((item) => `- ${item.title}`)].join('\n')
+          ? [
+              'Follow-ups',
+              '',
+              ...followups.map((item) => `- ${item.title}`),
+            ].join('\n')
           : 'No open follow-ups.';
       }
       case '/task': {
@@ -6457,7 +7220,10 @@ export class PersonalOpsService {
         if (!args.trim()) {
           return 'Usage: /note Note text';
         }
-        const note = this.createManualNote({ title: args.trim(), body: args.trim() });
+        const note = this.createManualNote({
+          title: args.trim(),
+          body: args.trim(),
+        });
         return `Note logged: ${note.title}`;
       }
       case '/correct': {

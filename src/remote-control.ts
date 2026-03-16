@@ -259,7 +259,9 @@ async function handleRequest(
 
   if (parts[3] === 'transcript' && req.method === 'GET') {
     const chatJid = url.searchParams.get('chatJid');
-    const group = dependencies.getGroups().find((entry) => entry.chatJid === chatJid);
+    const group = dependencies
+      .getGroups()
+      .find((entry) => entry.chatJid === chatJid);
     const transcript =
       group?.transcriptPath && fs.existsSync(group.transcriptPath)
         ? formatTranscript(fs.readFileSync(group.transcriptPath, 'utf-8'))
@@ -276,7 +278,9 @@ async function handleRequest(
 
   if (parts[3] === 'message' && req.method === 'POST') {
     const contentType = req.headers['content-type'] || '';
-    const contentTypeValue = Array.isArray(contentType) ? contentType[0] || '' : contentType;
+    const contentTypeValue = Array.isArray(contentType)
+      ? contentType[0] || ''
+      : contentType;
     if (!contentTypeValue.toLowerCase().includes('application/json')) {
       res.statusCode = 415;
       res.setHeader('cache-control', 'no-store, no-cache, must-revalidate');
@@ -285,7 +289,12 @@ async function handleRequest(
       res.setHeader('referrer-policy', 'no-referrer');
       res.setHeader('x-content-type-options', 'nosniff');
       res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ ok: false, error: 'Requests must use Content-Type: application/json.' }));
+      res.end(
+        JSON.stringify({
+          ok: false,
+          error: 'Requests must use Content-Type: application/json.',
+        }),
+      );
       return;
     }
     const body = await readBody(req);
@@ -364,7 +373,10 @@ export async function listenRemoteControlServer(
       listenServer.listen(port, '127.0.0.1', () => {
         const address = listenServer.address();
         if (!address || typeof address === 'string') {
-          settle({ ok: false, error: 'Failed to determine remote control port.' });
+          settle({
+            ok: false,
+            error: 'Failed to determine remote control port.',
+          });
           return;
         }
 
@@ -396,7 +408,10 @@ export async function startRemoteControl(
     return { ok: true, url: activeSession.url };
   }
   if (!dependencies) {
-    return { ok: false, error: 'Remote control dependencies are not configured.' };
+    return {
+      ok: false,
+      error: 'Remote control dependencies are not configured.',
+    };
   }
 
   server = createServer((req, res) => {
@@ -407,9 +422,15 @@ export async function startRemoteControl(
     });
   });
 
-  const listenResult = await listenRemoteControlServer(server, REMOTE_CONTROL_PORT);
+  const listenResult = await listenRemoteControlServer(
+    server,
+    REMOTE_CONTROL_PORT,
+  );
   if (!listenResult.ok) {
-    logger.error({ error: listenResult.error }, 'Failed to start Remote Control session');
+    logger.error(
+      { error: listenResult.error },
+      'Failed to start Remote Control session',
+    );
     server.close();
     server = null;
     clearState();
@@ -427,11 +448,16 @@ export async function startRemoteControl(
   };
   activeSession = session;
   saveState(session);
-  logger.info({ url: session.url, sender, chatJid }, 'Remote Control session started');
+  logger.info(
+    { url: session.url, sender, chatJid },
+    'Remote Control session started',
+  );
   return { ok: true, url: session.url };
 }
 
-export function stopRemoteControl(): { ok: true } | { ok: false; error: string } {
+export function stopRemoteControl():
+  | { ok: true }
+  | { ok: false; error: string } {
   if (!activeSession || !server) {
     return { ok: false, error: 'No active Remote Control session.' };
   }

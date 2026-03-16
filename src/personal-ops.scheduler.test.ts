@@ -19,16 +19,24 @@ describe('personal-ops scheduler', () => {
 
   it('treats 6am to 10pm as the active auto-sync window', () => {
     expect(
-      _isWithinPersonalOpsActiveWindowForTesting(new Date('2026-03-15T05:59:00')),
+      _isWithinPersonalOpsActiveWindowForTesting(
+        new Date('2026-03-15T05:59:00'),
+      ),
     ).toBe(false);
     expect(
-      _isWithinPersonalOpsActiveWindowForTesting(new Date('2026-03-15T06:00:00')),
+      _isWithinPersonalOpsActiveWindowForTesting(
+        new Date('2026-03-15T06:00:00'),
+      ),
     ).toBe(true);
     expect(
-      _isWithinPersonalOpsActiveWindowForTesting(new Date('2026-03-15T21:59:00')),
+      _isWithinPersonalOpsActiveWindowForTesting(
+        new Date('2026-03-15T21:59:00'),
+      ),
     ).toBe(true);
     expect(
-      _isWithinPersonalOpsActiveWindowForTesting(new Date('2026-03-15T22:00:00')),
+      _isWithinPersonalOpsActiveWindowForTesting(
+        new Date('2026-03-15T22:00:00'),
+      ),
     ).toBe(false);
   });
 

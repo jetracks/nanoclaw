@@ -92,7 +92,10 @@ function syncAgentRunnerSource(
   groupAgentRunnerDir: string,
   groupName: string,
 ): void {
-  const metadataPath = path.join(groupAgentRunnerDir, AGENT_RUNNER_SYNC_METADATA);
+  const metadataPath = path.join(
+    groupAgentRunnerDir,
+    AGENT_RUNNER_SYNC_METADATA,
+  );
   const sourceHash = hashDirectory(agentRunnerSrc);
 
   if (!fs.existsSync(groupAgentRunnerDir)) {
@@ -104,7 +107,9 @@ function syncAgentRunnerSource(
   let storedHash: string | undefined;
   if (fs.existsSync(metadataPath)) {
     try {
-      storedHash = JSON.parse(fs.readFileSync(metadataPath, 'utf-8')).sourceHash;
+      storedHash = JSON.parse(
+        fs.readFileSync(metadataPath, 'utf-8'),
+      ).sourceHash;
     } catch {
       storedHash = undefined;
     }
@@ -138,7 +143,10 @@ function syncAgentRunnerSource(
   fs.rmSync(groupAgentRunnerDir, { recursive: true, force: true });
   fs.cpSync(agentRunnerSrc, groupAgentRunnerDir, { recursive: true });
   fs.writeFileSync(metadataPath, JSON.stringify({ sourceHash }, null, 2));
-  logger.info({ group: groupName }, 'Updated per-group agent-runner source cache');
+  logger.info(
+    { group: groupName },
+    'Updated per-group agent-runner source cache',
+  );
 }
 
 function buildVolumeMounts(
@@ -297,7 +305,14 @@ export function buildContainerArgs(
   }
 
   for (const mount of mounts) {
-    args.push(...mountArgs(mount.hostPath, mount.containerPath, mount.readonly, runtime));
+    args.push(
+      ...mountArgs(
+        mount.hostPath,
+        mount.containerPath,
+        mount.readonly,
+        runtime,
+      ),
+    );
   }
 
   args.push(CONTAINER_IMAGE);
@@ -319,7 +334,11 @@ export async function runContainerAgent(
   const mounts = buildVolumeMounts(group, input.isMain);
   const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
   const containerName = `nanoclaw-${safeName}-${Date.now()}`;
-  const containerArgs = buildContainerArgs(mounts, containerName, CONTAINER_RUNTIME);
+  const containerArgs = buildContainerArgs(
+    mounts,
+    containerName,
+    CONTAINER_RUNTIME,
+  );
 
   logger.debug(
     {
@@ -348,9 +367,13 @@ export async function runContainerAgent(
   fs.mkdirSync(logsDir, { recursive: true });
 
   return new Promise((resolve) => {
-    const container = spawn(containerRuntimeBinary(CONTAINER_RUNTIME), containerArgs, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+    const container = spawn(
+      containerRuntimeBinary(CONTAINER_RUNTIME),
+      containerArgs,
+      {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      },
+    );
 
     onProcess(container, containerName);
 
@@ -454,15 +477,19 @@ export async function runContainerAgent(
         { group: group.name, containerName },
         'Container timeout, stopping gracefully',
       );
-      exec(stopContainer(containerName, CONTAINER_RUNTIME), { timeout: 15000 }, (err) => {
-        if (err) {
-          logger.warn(
-            { group: group.name, containerName, err },
-            'Graceful stop failed, force killing',
-          );
-          container.kill('SIGKILL');
-        }
-      });
+      exec(
+        stopContainer(containerName, CONTAINER_RUNTIME),
+        { timeout: 15000 },
+        (err) => {
+          if (err) {
+            logger.warn(
+              { group: group.name, containerName, err },
+              'Graceful stop failed, force killing',
+            );
+            container.kill('SIGKILL');
+          }
+        },
+      );
     };
 
     let timeout = setTimeout(killOnTimeout, timeoutMs);

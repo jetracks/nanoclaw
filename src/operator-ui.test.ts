@@ -25,7 +25,10 @@ import {
 
 describe('operator-ui', () => {
   const transcriptPath = path.join(dataDir, 'transcript.jsonl');
-  const injectMessage = vi.fn(() => ({ ok: true as const, messageId: 'msg_123' }));
+  const injectMessage = vi.fn(() => ({
+    ok: true as const,
+    messageId: 'msg_123',
+  }));
   const sendInput = vi.fn(() => true);
   const sendOutbound = vi.fn(async () => ({ ok: true as const }));
   const createTask = vi.fn(() => ({ ok: true as const, taskId: 'task_123' }));
@@ -121,7 +124,10 @@ describe('operator-ui', () => {
     discoverRepositories.mockClear();
     generateReport.mockClear();
 
-    fs.rmSync(path.join(dataDir, 'personal-ops'), { recursive: true, force: true });
+    fs.rmSync(path.join(dataDir, 'personal-ops'), {
+      recursive: true,
+      force: true,
+    });
     fs.mkdirSync(path.join(dataDir, 'local-channel'), { recursive: true });
     fs.writeFileSync(
       path.join(dataDir, 'local-channel', 'outbox.jsonl'),
@@ -358,7 +364,8 @@ describe('operator-ui', () => {
                   targetId: 'google:acct_1',
                   urgency: 'inline',
                   prompt: 'Which account should be tuned next?',
-                  rationale: 'A connected account is still missing defaults or triage guidance.',
+                  rationale:
+                    'A connected account is still missing defaults or triage guidance.',
                   recommendedOptionId: null,
                   options: [],
                   freeformAllowed: false,
@@ -562,11 +569,14 @@ describe('operator-ui', () => {
     expect(reportPayload.ok).toBe(true);
     expect(reportPayload.report.reportType).toBe('standup');
 
-    const generateReportRes = await fetch(`${baseUrl}/api/reports/standup/generate`, {
-      method: 'POST',
-      headers: authorizedHeaders({ 'content-type': 'application/json' }),
-      body: JSON.stringify({}),
-    });
+    const generateReportRes = await fetch(
+      `${baseUrl}/api/reports/standup/generate`,
+      {
+        method: 'POST',
+        headers: authorizedHeaders({ 'content-type': 'application/json' }),
+        body: JSON.stringify({}),
+      },
+    );
     const generatedReportPayload: any = await generateReportRes.json();
     expect(generatedReportPayload.ok).toBe(true);
     expect(generateReport).toHaveBeenCalledWith('standup');
@@ -586,9 +596,9 @@ describe('operator-ui', () => {
     const connectionsPayload: any = await connectionsRes.json();
     expect(connectionsPayload.ok).toBe(true);
     expect(connectionsPayload.connections).toHaveLength(2);
-    expect(connectionsPayload.connections.map((entry: any) => entry.accountLabel)).toEqual(
-      ['jerry@example.com', 'ops@example.com'],
-    );
+    expect(
+      connectionsPayload.connections.map((entry: any) => entry.accountLabel),
+    ).toEqual(['jerry@example.com', 'ops@example.com']);
 
     const connectionCatalogRes = await fetch(
       `${baseUrl}/api/connections/google/acct_1/catalog`,
@@ -627,11 +637,14 @@ describe('operator-ui', () => {
       },
     });
 
-    const syncConnectionRes = await fetch(`${baseUrl}/api/connections/google/acct_2/sync`, {
-      method: 'POST',
-      headers: authorizedHeaders({ 'content-type': 'application/json' }),
-      body: JSON.stringify({}),
-    });
+    const syncConnectionRes = await fetch(
+      `${baseUrl}/api/connections/google/acct_2/sync`,
+      {
+        method: 'POST',
+        headers: authorizedHeaders({ 'content-type': 'application/json' }),
+        body: JSON.stringify({}),
+      },
+    );
     const syncConnectionPayload: any = await syncConnectionRes.json();
     expect(syncConnectionPayload.ok).toBe(true);
     expect(syncProvider).toHaveBeenCalledWith({
@@ -647,7 +660,8 @@ describe('operator-ui', () => {
         body: JSON.stringify({}),
       },
     );
-    const disconnectConnectionPayload: any = await disconnectConnectionRes.json();
+    const disconnectConnectionPayload: any =
+      await disconnectConnectionRes.json();
     expect(disconnectConnectionPayload.ok).toBe(true);
     expect(disconnect).toHaveBeenCalledWith({
       provider: 'google',
@@ -697,7 +711,12 @@ describe('operator-ui', () => {
     });
     const adminMessagePayload: any = await adminMessageRes.json();
     expect(adminMessagePayload.ok).toBe(true);
-    expect(injectMessage).toHaveBeenCalledWith('local:main', 'admin hi', undefined, undefined);
+    expect(injectMessage).toHaveBeenCalledWith(
+      'local:main',
+      'admin hi',
+      undefined,
+      undefined,
+    );
 
     const taskRes = await fetch(`${baseUrl}/api/tasks`, {
       method: 'POST',
@@ -734,11 +753,14 @@ describe('operator-ui', () => {
       notes: undefined,
     });
 
-    const discoverReposRes = await fetch(`${baseUrl}/api/repositories/discover`, {
-      method: 'POST',
-      headers: authorizedHeaders({ 'content-type': 'application/json' }),
-      body: JSON.stringify({ rootPath: '~', maxDepth: 5 }),
-    });
+    const discoverReposRes = await fetch(
+      `${baseUrl}/api/repositories/discover`,
+      {
+        method: 'POST',
+        headers: authorizedHeaders({ 'content-type': 'application/json' }),
+        body: JSON.stringify({ rootPath: '~', maxDepth: 5 }),
+      },
+    );
     const discoverReposPayload: any = await discoverReposRes.json();
     expect(discoverReposPayload.ok).toBe(true);
     expect(discoverReposPayload.count).toBe(1);
@@ -857,16 +879,12 @@ describe('operator-ui', () => {
     );
     const adminDetail: any = await adminDetailRes.json();
     expect(adminDetail.ok).toBe(true);
-    expect(adminDetail.detail.conversation.map((item: any) => item.text)).toEqual([
-      'hello',
-      'Older stored reply',
-      'Newer transcript response',
-    ]);
-    expect(adminDetail.detail.conversation.map((item: any) => item.source)).toEqual([
-      'messages',
-      'messages',
-      'transcript',
-    ]);
+    expect(
+      adminDetail.detail.conversation.map((item: any) => item.text),
+    ).toEqual(['hello', 'Older stored reply', 'Newer transcript response']);
+    expect(
+      adminDetail.detail.conversation.map((item: any) => item.source),
+    ).toEqual(['messages', 'messages', 'transcript']);
   });
 
   it('dedupes Today waiting cards, aligns bootstrap inbox counts, and returns clearer surfaced reasons', async () => {
@@ -916,7 +934,8 @@ describe('operator-ui', () => {
           blockers: [
             {
               id: 'work_1',
-              title: 'Investigate SPS Commerce FTP connection failure impacting EDI transfer',
+              title:
+                'Investigate SPS Commerce FTP connection failure impacting EDI transfer',
               sourceKind: 'email',
               sourceProvider: 'microsoft',
               sourceRecordKey: 'microsoft:acct_bm:email:incident_1',
@@ -929,7 +948,8 @@ describe('operator-ui', () => {
               needsReview: false,
               linkedContactIds: [],
               openLoopState: 'blocked',
-              notes: 'Same obligation should not appear twice in Today waiting lane.',
+              notes:
+                'Same obligation should not appear twice in Today waiting lane.',
               createdAt: '2026-03-15T18:55:00.000Z',
               updatedAt: '2026-03-15T19:00:00.000Z',
             },
@@ -941,7 +961,8 @@ describe('operator-ui', () => {
               id: 'loop_1',
               kind: 'work_item',
               state: 'blocked',
-              title: 'Investigate SPS Commerce FTP connection failure impacting EDI transfer',
+              title:
+                'Investigate SPS Commerce FTP connection failure impacting EDI transfer',
               summary: 'Same incident represented as an open loop.',
               priority: 'urgent',
               confidence: 0.88,
@@ -1037,7 +1058,8 @@ describe('operator-ui', () => {
             kind: 'email',
             externalId: 'digest_1',
             title: 'Tips for using your new inbox',
-            summary: 'A passive onboarding digest that should not appear as action work.',
+            summary:
+              'A passive onboarding digest that should not appear as action work.',
             body: 'Here are a few suggestions to help you organize your inbox.',
             participants: ['notifications@example.com'],
             occurredAt: '2026-03-15T18:40:00.000Z',
@@ -1234,16 +1256,20 @@ describe('operator-ui', () => {
     expect(inboxPayload.ok).toBe(true);
     expect(inboxPayload.lanes.needsAction).toHaveLength(1);
     expect(inboxPayload.lanes.lowSignal).toHaveLength(1);
-    expect(inboxPayload.lanes.lowSignal[0].title).toBe('Tips for using your new inbox');
+    expect(inboxPayload.lanes.lowSignal[0].title).toBe(
+      'Tips for using your new inbox',
+    );
 
     const workboardRes = await fetch(`${baseUrl}/api/workboard`, {
       headers: authorizedHeaders(),
     });
     const workboardPayload: any = await workboardRes.json();
     expect(workboardPayload.ok).toBe(true);
-    expect(workboardPayload.sections.find((section: any) => section.key === 'blocked').items[0].surfacedReasonSummary).toBe(
-      '1 blocker needs attention',
-    );
+    expect(
+      workboardPayload.sections.find(
+        (section: any) => section.key === 'blocked',
+      ).items[0].surfacedReasonSummary,
+    ).toBe('1 blocker needs attention');
   });
 
   it('keeps Today focused by dropping automated platform email work from the main lane', async () => {
@@ -1271,7 +1297,8 @@ describe('operator-ui', () => {
               title: 'Review Facebook rejected items',
               sourceKind: 'email',
               sourceProvider: 'microsoft',
-              sourceRecordKey: 'microsoft:acct_bm:email:missing_facebook_today_1',
+              sourceRecordKey:
+                'microsoft:acct_bm:email:missing_facebook_today_1',
               clientId: 'client_bm',
               projectId: 'project_coo',
               dueDate: null,

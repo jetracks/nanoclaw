@@ -54,7 +54,11 @@ import {
   WorkItem,
 } from './types.js';
 import { getSourceRecordKey } from './personal-ops/db.js';
-import { getSourceRecord, getWorkItem, parseSourceRecordKey } from './personal-ops/db.js';
+import {
+  getSourceRecord,
+  getWorkItem,
+  parseSourceRecordKey,
+} from './personal-ops/db.js';
 
 interface OperatorUiConversationItem {
   timestamp: string;
@@ -102,10 +106,7 @@ export interface OperatorUiPersonalOpsDependencies {
   getInbox: (input?: { includeNoise?: boolean }) => SourceRecord[];
   getCalendar: () => SourceRecord[];
   getWorkboard: () => PersonalOpsWorkstream[];
-  getHistory: (input?: {
-    since?: string;
-    until?: string;
-  }) => Activity[];
+  getHistory: (input?: { since?: string; until?: string }) => Activity[];
   getHistoryWorkstreams: (input?: {
     since?: string;
     until?: string;
@@ -161,7 +162,9 @@ export interface OperatorUiPersonalOpsDependencies {
   rejectQueueItem: (id: string) => ApprovalQueueItem;
   editQueueItem: (
     id: string,
-    input: Partial<Pick<ApprovalQueueItem, 'title' | 'summary' | 'body' | 'reason'>>,
+    input: Partial<
+      Pick<ApprovalQueueItem, 'title' | 'summary' | 'body' | 'reason'>
+    >,
   ) => ApprovalQueueItem;
   getMemoryFacts: () => MemoryFact[];
   acceptMemoryFact: (id: string) => void;
@@ -400,15 +403,24 @@ function hasValidOperatorUiAuth(req: IncomingMessage): boolean {
   return requestAuthHeader(req) === ensureOperatorUiAuthToken();
 }
 
-function requireOperatorUiAuth(req: IncomingMessage, res: ServerResponse): boolean {
+function requireOperatorUiAuth(
+  req: IncomingMessage,
+  res: ServerResponse,
+): boolean {
   if (hasValidOperatorUiAuth(req)) {
     return true;
   }
-  writeJson(res, 403, { ok: false, error: 'Operator UI session token is required.' });
+  writeJson(res, 403, {
+    ok: false,
+    error: 'Operator UI session token is required.',
+  });
   return false;
 }
 
-function requireJsonRequest(req: IncomingMessage, res: ServerResponse): boolean {
+function requireJsonRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+): boolean {
   const contentType = req.headers['content-type'] || '';
   const value = Array.isArray(contentType) ? contentType[0] || '' : contentType;
   if (value.toLowerCase().includes('application/json')) {
@@ -449,15 +461,22 @@ function readBody(req: IncomingMessage): Promise<string> {
 }
 
 function getOperatorUiBaseUrl(): string {
-  return operatorUiState.url || `http://${OPERATOR_UI_HOST}:${OPERATOR_UI_PORT}`;
+  return (
+    operatorUiState.url || `http://${OPERATOR_UI_HOST}:${OPERATOR_UI_PORT}`
+  );
 }
 
 function contentTypeFor(filePath: string): string {
-  return MIME_TYPES[path.extname(filePath).toLowerCase()] || 'application/octet-stream';
+  return (
+    MIME_TYPES[path.extname(filePath).toLowerCase()] ||
+    'application/octet-stream'
+  );
 }
 
 function resolveStaticPath(urlPath: string): string | null {
-  const normalized = path.normalize(decodeURIComponent(urlPath)).replace(/^(\.\.(\/|\\|$))+/, '');
+  const normalized = path
+    .normalize(decodeURIComponent(urlPath))
+    .replace(/^(\.\.(\/|\\|$))+/, '');
   const candidate = path.join(UI_DIST_DIR, normalized);
   const relative = path.relative(UI_DIST_DIR, candidate);
   if (relative.startsWith('..') || path.isAbsolute(relative)) {
@@ -2145,11 +2164,12 @@ function buildConversation(
     source: 'messages' as const,
   }));
 
-  const latestAssistantTimestampFromMessages = fromMessages
-    .filter((item) => item.role === 'assistant')
-    .map((item) => item.timestamp)
-    .sort()
-    .at(-1) || '';
+  const latestAssistantTimestampFromMessages =
+    fromMessages
+      .filter((item) => item.role === 'assistant')
+      .map((item) => item.timestamp)
+      .sort()
+      .at(-1) || '';
 
   const fallbackAssistantMessages = (
     chatJid.startsWith('local:')
@@ -2219,8 +2239,12 @@ function buildGroupDetail(
   };
 }
 
-function sourceAttentionStateForUi(source: SourceRecord): NonNullable<SourceRecord['attention']> {
-  const input = (source.attention || {}) as NonNullable<SourceRecord['attention']>;
+function sourceAttentionStateForUi(
+  source: SourceRecord,
+): NonNullable<SourceRecord['attention']> {
+  const input = (source.attention || {}) as NonNullable<
+    SourceRecord['attention']
+  >;
   const directness =
     input.directness === 'direct' ||
     input.directness === 'mentioned' ||
@@ -2233,15 +2257,16 @@ function sourceAttentionStateForUi(source: SourceRecord): NonNullable<SourceReco
     operationalRisk: input.operationalRisk === true,
     reportWorthy: input.reportWorthy === true,
     directness,
-    importanceReason: typeof input.importanceReason === 'string' ? input.importanceReason : '',
+    importanceReason:
+      typeof input.importanceReason === 'string' ? input.importanceReason : '',
     actionConfidence:
       typeof input.actionConfidence === 'number'
         ? input.actionConfidence
-        : source.attributionConfidence ?? null,
+        : (source.attributionConfidence ?? null),
     mappingConfidence:
       typeof input.mappingConfidence === 'number'
         ? input.mappingConfidence
-        : source.attributionConfidence ?? null,
+        : (source.attributionConfidence ?? null),
   };
 }
 
@@ -2250,8 +2275,12 @@ function sourceLooksAutomatedForToday(source: SourceRecord): boolean {
   if (source.metadata?.automatedSender === true) return true;
   const fields = [
     ...(Array.isArray(source.participants) ? source.participants : []),
-    typeof source.metadata?.fromAddress === 'string' ? source.metadata.fromAddress : '',
-    typeof source.metadata?.senderAddress === 'string' ? source.metadata.senderAddress : '',
+    typeof source.metadata?.fromAddress === 'string'
+      ? source.metadata.fromAddress
+      : '',
+    typeof source.metadata?.senderAddress === 'string'
+      ? source.metadata.senderAddress
+      : '',
   ]
     .filter(Boolean)
     .join(' ')
@@ -2290,7 +2319,11 @@ function sourceShouldSurfaceOnToday(source: SourceRecord): boolean {
     return direct && (attention.actionRequired || attention.operationalRisk);
   }
   if (source.kind === 'jira_issue') {
-    return attention.actionRequired || attention.operationalRisk || source.priority === 'urgent';
+    return (
+      attention.actionRequired ||
+      attention.operationalRisk ||
+      source.priority === 'urgent'
+    );
   }
   return attention.actionRequired || attention.operationalRisk;
 }
@@ -2304,7 +2337,9 @@ function sourceShouldSurfaceInTodayAwareness(source: SourceRecord): boolean {
   return direct || sourceHasTodayCriticalSignal(source);
 }
 
-function sourceFromSourceRecordKeyForUi(sourceRecordKey: string | null | undefined): SourceRecord | null {
+function sourceFromSourceRecordKeyForUi(
+  sourceRecordKey: string | null | undefined,
+): SourceRecord | null {
   if (!sourceRecordKey) return null;
   const parsed = parseSourceRecordKey(sourceRecordKey);
   if (!parsed) return null;
@@ -2333,7 +2368,9 @@ function workItemShouldSurfaceOnToday(item: WorkItem): boolean {
 }
 
 function openLoopShouldSurfaceOnToday(loop: OpenLoop): boolean {
-  if (!(loop.state === 'blocked' || loop.state === 'waiting' || loop.needsReview)) {
+  if (
+    !(loop.state === 'blocked' || loop.state === 'waiting' || loop.needsReview)
+  ) {
     return false;
   }
   if (loop.workItemId) {
@@ -2356,7 +2393,10 @@ function sourceNeedsActionForUi(source: SourceRecord): boolean {
 
 function sourceIsImportantAwarenessForUi(source: SourceRecord): boolean {
   const attention = sourceAttentionStateForUi(source);
-  return attention.awarenessOnly && (attention.reportWorthy || attention.operationalRisk);
+  return (
+    attention.awarenessOnly &&
+    (attention.reportWorthy || attention.operationalRisk)
+  );
 }
 
 function sourceNeedsReviewForUi(source: SourceRecord): boolean {
@@ -2382,7 +2422,10 @@ function sourceSurfacedReasonSummary(source: SourceRecord): string {
   if (source.metadata?.isImportant === true) {
     return 'Marked important';
   }
-  if (source.metadata?.mentionsSelf === true || source.metadata?.isDirectMessage === true) {
+  if (
+    source.metadata?.mentionsSelf === true ||
+    source.metadata?.isDirectMessage === true
+  ) {
     return 'Directly addressed to you';
   }
   if (sourceNeedsReviewForUi(source)) {
@@ -2413,7 +2456,8 @@ function summarizeWorkItemReason(item: WorkItem): string {
       return 'Quieted from active follow-up';
     case 'open':
     default:
-      if (item.openLoopState === 'blocked') return 'Blocked and needs your attention';
+      if (item.openLoopState === 'blocked')
+        return 'Blocked and needs your attention';
       if (item.openLoopState === 'waiting') return 'Waiting on someone else';
       if (item.openLoopState === 'awareness') return 'Worth keeping in view';
       return 'Needs your next move';
@@ -2458,13 +2502,19 @@ function summarizeWorkstreamReason(stream: PersonalOpsWorkstream): string {
   return 'Recent evidence keeps this work visible';
 }
 
-function dedupeSummaryCards(cards: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
+function dedupeSummaryCards(
+  cards: Array<Record<string, unknown>>,
+): Array<Record<string, unknown>> {
   const seen = new Set<string>();
   return cards.filter((card) => {
     const sourceRecordKey =
-      typeof card.sourceRecordKey === 'string' && card.sourceRecordKey ? card.sourceRecordKey : null;
+      typeof card.sourceRecordKey === 'string' && card.sourceRecordKey
+        ? card.sourceRecordKey
+        : null;
     const workItemId =
-      typeof card.workItemId === 'string' && card.workItemId ? card.workItemId : null;
+      typeof card.workItemId === 'string' && card.workItemId
+        ? card.workItemId
+        : null;
     const id = typeof card.id === 'string' ? card.id : JSON.stringify(card);
     const key = sourceRecordKey
       ? `source:${sourceRecordKey}`
@@ -2486,14 +2536,26 @@ function splitInboxItemsForUi(items: SourceRecord[]): {
 } {
   const needsAction = items.filter(sourceNeedsActionForUi);
   const importantAwareness = items.filter(
-    (source) => !sourceNeedsActionForUi(source) && sourceIsImportantAwarenessForUi(source),
+    (source) =>
+      !sourceNeedsActionForUi(source) &&
+      sourceIsImportantAwarenessForUi(source),
   );
   const hiddenKeys = new Set([
     ...needsAction.map((source) =>
-      getSourceRecordKey(source.provider, source.accountId, source.kind, source.externalId),
+      getSourceRecordKey(
+        source.provider,
+        source.accountId,
+        source.kind,
+        source.externalId,
+      ),
     ),
     ...importantAwareness.map((source) =>
-      getSourceRecordKey(source.provider, source.accountId, source.kind, source.externalId),
+      getSourceRecordKey(
+        source.provider,
+        source.accountId,
+        source.kind,
+        source.externalId,
+      ),
     ),
   ]);
   return {
@@ -2502,7 +2564,12 @@ function splitInboxItemsForUi(items: SourceRecord[]): {
     lowSignal: items.filter(
       (source) =>
         !hiddenKeys.has(
-          getSourceRecordKey(source.provider, source.accountId, source.kind, source.externalId),
+          getSourceRecordKey(
+            source.provider,
+            source.accountId,
+            source.kind,
+            source.externalId,
+          ),
         ),
     ),
   };
@@ -2511,7 +2578,12 @@ function splitInboxItemsForUi(items: SourceRecord[]): {
 function buildSourceSummaryCard(source: SourceRecord): Record<string, unknown> {
   return {
     kind: 'source_record',
-    id: getSourceRecordKey(source.provider, source.accountId, source.kind, source.externalId),
+    id: getSourceRecordKey(
+      source.provider,
+      source.accountId,
+      source.kind,
+      source.externalId,
+    ),
     title: source.title,
     summary: source.summary || source.body || 'No preview available.',
     timestamp: source.occurredAt,
@@ -2559,7 +2631,9 @@ function buildOpenLoopSummaryCard(loop: OpenLoop): Record<string, unknown> {
   };
 }
 
-function buildApprovalSummaryCard(item: ApprovalQueueItem): Record<string, unknown> {
+function buildApprovalSummaryCard(
+  item: ApprovalQueueItem,
+): Record<string, unknown> {
   return {
     kind: 'approval_queue',
     id: item.id,
@@ -2574,11 +2648,16 @@ function buildApprovalSummaryCard(item: ApprovalQueueItem): Record<string, unkno
   };
 }
 
-function buildWorkstreamSummaryCard(stream: PersonalOpsWorkstream): Record<string, unknown> {
+function buildWorkstreamSummaryCard(
+  stream: PersonalOpsWorkstream,
+): Record<string, unknown> {
   return {
     kind: 'workstream',
     id: stream.key,
-    title: [stream.client?.name || 'Unassigned client', stream.project?.name || 'General work'].join(' / '),
+    title: [
+      stream.client?.name || 'Unassigned client',
+      stream.project?.name || 'General work',
+    ].join(' / '),
     summary:
       stream.signals[0] ||
       `${stream.items.length} open item${stream.items.length === 1 ? '' : 's'} • ${stream.openLoopCount} open loop${stream.openLoopCount === 1 ? '' : 's'}`,
@@ -2598,7 +2677,9 @@ function buildWorkstreamSummaryCard(stream: PersonalOpsWorkstream): Record<strin
   };
 }
 
-function buildSetupPayload(deps: OperatorUiDependencies): Record<string, unknown> {
+function buildSetupPayload(
+  deps: OperatorUiDependencies,
+): Record<string, unknown> {
   const personalOps = deps.personalOps;
   if (!personalOps) {
     return {
@@ -2606,7 +2687,8 @@ function buildSetupPayload(deps: OperatorUiDependencies): Record<string, unknown
       setup: {
         complete: false,
         incompleteCount: 1,
-        recommendedNextAction: 'Enable personal ops to use the assistant cockpit.',
+        recommendedNextAction:
+          'Enable personal ops to use the assistant cockpit.',
         reviewBurden: 0,
         recommendedQuestionId: null,
         pendingInlineQuestions: 0,
@@ -2653,13 +2735,20 @@ function buildSetupPayload(deps: OperatorUiDependencies): Record<string, unknown
 
   const connections = personalOps
     .listConnections()
-    .filter((connection) => Boolean(connection.accountId) && connection.status !== 'disconnected');
+    .filter(
+      (connection) =>
+        Boolean(connection.accountId) && connection.status !== 'disconnected',
+    );
   const clients = personalOps.getClients();
   const projects = personalOps.getProjects();
   const queueCount = personalOps.getApprovalQueue().length;
   const reviewCount = personalOps.getReviewQueue().length;
-  const questions = personalOps.getAssistantQuestions({ surface: 'connections' });
-  const queuedQuestions = personalOps.getAssistantQuestions({ urgency: 'queued' }).length;
+  const questions = personalOps.getAssistantQuestions({
+    surface: 'connections',
+  });
+  const queuedQuestions = personalOps.getAssistantQuestions({
+    urgency: 'queued',
+  }).length;
   const improvementDrafts = personalOps
     .getImprovementTickets()
     .filter((ticket) => ticket.status === 'draft').length;
@@ -2668,9 +2757,9 @@ function buildSetupPayload(deps: OperatorUiDependencies): Record<string, unknown
     const settings = connection.settings || {};
     return Boolean(
       settings.defaultClientId ||
-        settings.defaultProjectId ||
-        settings.preferClientOnlyMapping ||
-        settings.triageGuidance,
+      settings.defaultProjectId ||
+      settings.preferClientOnlyMapping ||
+      settings.triageGuidance,
     );
   }).length;
 
@@ -2699,7 +2788,10 @@ function buildSetupPayload(deps: OperatorUiDependencies): Record<string, unknown
         connections.length > 0
           ? `${configuredDefaults}/${connections.length} account${connections.length === 1 ? '' : 's'} tuned`
           : 'Add account defaults after connecting.',
-      done: connections.length === 0 ? false : configuredDefaults === connections.length,
+      done:
+        connections.length === 0
+          ? false
+          : configuredDefaults === connections.length,
       href: '/connections',
     },
     {
@@ -2715,18 +2807,17 @@ function buildSetupPayload(deps: OperatorUiDependencies): Record<string, unknown
   ];
 
   const incompleteCount = checklist.filter((item) => !item.done).length;
-  const recommendedNextAction =
-    !checklist[0].done
-      ? 'Connect your first account in Connections.'
-      : !checklist[1].done
-        ? 'Create the core clients and projects in Connections.'
-        : !checklist[2].done
-          ? 'Set default client/project mappings or triage guidance on your accounts.'
-          : queueCount > 0
-            ? `Review ${queueCount} pending approval${queueCount === 1 ? '' : 's'}.`
-            : reviewCount > 0
-              ? `Confirm ${reviewCount} suggestion${reviewCount === 1 ? '' : 's'} in Review.`
-              : 'Start with Today to work the most important open loops.';
+  const recommendedNextAction = !checklist[0].done
+    ? 'Connect your first account in Connections.'
+    : !checklist[1].done
+      ? 'Create the core clients and projects in Connections.'
+      : !checklist[2].done
+        ? 'Set default client/project mappings or triage guidance on your accounts.'
+        : queueCount > 0
+          ? `Review ${queueCount} pending approval${queueCount === 1 ? '' : 's'}.`
+          : reviewCount > 0
+            ? `Confirm ${reviewCount} suggestion${reviewCount === 1 ? '' : 's'} in Review.`
+            : 'Start with Today to work the most important open loops.';
 
   return {
     ok: true,
@@ -2745,16 +2836,20 @@ function buildSetupPayload(deps: OperatorUiDependencies): Record<string, unknown
   };
 }
 
-function buildTodayPayload(deps: OperatorUiDependencies): Record<string, unknown> {
+function buildTodayPayload(
+  deps: OperatorUiDependencies,
+): Record<string, unknown> {
   const personalOps = deps.personalOps;
-  const today = (personalOps?.getToday() || null) as PersonalOpsTodayView | null;
+  const today = (personalOps?.getToday() ||
+    null) as PersonalOpsTodayView | null;
   const setup = buildSetupPayload(deps).setup as {
     recommendedNextAction: string;
     incompleteCount: number;
   };
   const connections = personalOps?.listConnections() || [];
   const degradedConnections = connections.filter(
-    (connection) => connection.status === 'degraded' || connection.lastSyncStatus === 'error',
+    (connection) =>
+      connection.status === 'degraded' || connection.lastSyncStatus === 'error',
   );
 
   if (!today) {
@@ -2792,10 +2887,14 @@ function buildTodayPayload(deps: OperatorUiDependencies): Record<string, unknown
     };
   }
 
-  const curatedPriorities = today.priorities.filter(workItemShouldSurfaceOnToday);
+  const curatedPriorities = today.priorities.filter(
+    workItemShouldSurfaceOnToday,
+  );
   const curatedBlockers = today.blockers.filter(workItemShouldSurfaceOnToday);
   const curatedOpenLoops = today.openLoops.filter(openLoopShouldSurfaceOnToday);
-  const curatedAwareness = today.awareness.filter(sourceShouldSurfaceInTodayAwareness);
+  const curatedAwareness = today.awareness.filter(
+    sourceShouldSurfaceInTodayAwareness,
+  );
   const now = curatedPriorities.slice(0, 4).map(buildWorkItemSummaryCard);
   const next = [
     ...today.approvalQueue.slice(0, 2).map(buildApprovalSummaryCard),
@@ -2804,18 +2903,17 @@ function buildTodayPayload(deps: OperatorUiDependencies): Record<string, unknown
   ].slice(0, 6);
   const waiting = [
     ...curatedBlockers.slice(0, 4).map(buildWorkItemSummaryCard),
-    ...curatedOpenLoops
-      .slice(0, 6)
-      .map(buildOpenLoopSummaryCard),
+    ...curatedOpenLoops.slice(0, 6).map(buildOpenLoopSummaryCard),
   ];
   const waitingDeduped = dedupeSummaryCards(waiting).slice(0, 8);
-  const awarenessLane = curatedAwareness.slice(0, 8).map(buildSourceSummaryCard);
-  const headerSummary =
-    now[0]
-      ? `${now.length} item${now.length === 1 ? '' : 's'} need your attention first.`
-      : next[0]
-        ? 'No urgent tasks are open; your next actions are queued below.'
-        : 'The day is relatively clear right now.';
+  const awarenessLane = curatedAwareness
+    .slice(0, 8)
+    .map(buildSourceSummaryCard);
+  const headerSummary = now[0]
+    ? `${now.length} item${now.length === 1 ? '' : 's'} need your attention first.`
+    : next[0]
+      ? 'No urgent tasks are open; your next actions are queued below.'
+      : 'The day is relatively clear right now.';
   const degradedSummary =
     degradedConnections.length > 0
       ? `${degradedConnections.length} connection${degradedConnections.length === 1 ? '' : 's'} need attention.`
@@ -2828,7 +2926,8 @@ function buildTodayPayload(deps: OperatorUiDependencies): Record<string, unknown
     today: {
       ...today,
       headerSummary,
-      recommendedNextAction: today.suggestedPlan[0] || setup.recommendedNextAction,
+      recommendedNextAction:
+        today.suggestedPlan[0] || setup.recommendedNextAction,
       degradedSummary,
       statusStrip: [
         {
@@ -2885,7 +2984,9 @@ function classifyWorkstreamSectionForUi(
   if (stream.blockerCount > 0) return 'blocked';
   if (
     stream.items.length > 0 &&
-    stream.items.every((item) => item.status === 'waiting' || item.status === 'on_hold')
+    stream.items.every(
+      (item) => item.status === 'waiting' || item.status === 'on_hold',
+    )
   ) {
     return 'waitingOnOthers';
   }
@@ -2893,7 +2994,9 @@ function classifyWorkstreamSectionForUi(
   return 'needsMyAction';
 }
 
-function buildWorkboardPayload(deps: OperatorUiDependencies): Record<string, unknown> {
+function buildWorkboardPayload(
+  deps: OperatorUiDependencies,
+): Record<string, unknown> {
   const workboard = deps.personalOps?.getWorkboard() || [];
   const sections = {
     needsMyAction: [] as Array<Record<string, unknown>>,
@@ -2925,25 +3028,41 @@ function buildWorkboardPayload(deps: OperatorUiDependencies): Record<string, unk
     ok: true,
     workboard,
     sections: [
-      { key: 'needsMyAction', title: 'Needs My Action', items: sections.needsMyAction },
-      { key: 'waitingOnOthers', title: 'Waiting On Others', items: sections.waitingOnOthers },
+      {
+        key: 'needsMyAction',
+        title: 'Needs My Action',
+        items: sections.needsMyAction,
+      },
+      {
+        key: 'waitingOnOthers',
+        title: 'Waiting On Others',
+        items: sections.waitingOnOthers,
+      },
       { key: 'blocked', title: 'Blocked', items: sections.blocked },
-      { key: 'needsReview', title: 'Needs Review', items: sections.needsReview },
+      {
+        key: 'needsReview',
+        title: 'Needs Review',
+        items: sections.needsReview,
+      },
     ],
   };
 }
 
-function buildAppBootstrap(deps: OperatorUiDependencies): Record<string, unknown> {
+function buildAppBootstrap(
+  deps: OperatorUiDependencies,
+): Record<string, unknown> {
   const groups = deps.getGroups();
   const personalOps = deps.personalOps;
-  const today = (personalOps?.getToday() || null) as PersonalOpsTodayView | null;
+  const today = (personalOps?.getToday() ||
+    null) as PersonalOpsTodayView | null;
   const connections = personalOps?.listConnections() || [];
   const degradedConnections = connections.filter(
-    (connection) => connection.status === 'degraded' || connection.lastSyncStatus === 'error',
+    (connection) =>
+      connection.status === 'degraded' || connection.lastSyncStatus === 'error',
   );
-  const runningSyncJobs = connections.flatMap((connection) => connection.syncJobs).filter(
-    (job) => job.status === 'running',
-  ).length;
+  const runningSyncJobs = connections
+    .flatMap((connection) => connection.syncJobs)
+    .filter((job) => job.status === 'running').length;
   const totalTasks = groups.reduce(
     (count, group) => count + deps.getTasks(group.folder).length,
     0,
@@ -2964,7 +3083,9 @@ function buildAppBootstrap(deps: OperatorUiDependencies): Record<string, unknown
   const prioritiesCount = Array.isArray(today?.priorities)
     ? today.priorities.filter(workItemShouldSurfaceOnToday).length
     : 0;
-  const meetingsCount = Array.isArray(today?.meetings) ? today.meetings.length : 0;
+  const meetingsCount = Array.isArray(today?.meetings)
+    ? today.meetings.length
+    : 0;
   const openLoopCount = Array.isArray(today?.openLoops)
     ? today.openLoops.filter(openLoopShouldSurfaceOnToday).length
     : 0;
@@ -3042,7 +3163,9 @@ function buildAppBootstrap(deps: OperatorUiDependencies): Record<string, unknown
   };
 }
 
-function buildAdminGroupsPayload(deps: OperatorUiDependencies): Record<string, unknown> {
+function buildAdminGroupsPayload(
+  deps: OperatorUiDependencies,
+): Record<string, unknown> {
   const groups = deps.getGroups();
   return {
     ok: true,
@@ -3052,16 +3175,20 @@ function buildAdminGroupsPayload(deps: OperatorUiDependencies): Record<string, u
   };
 }
 
-function buildAdminTasksPayload(deps: OperatorUiDependencies): Record<string, unknown> {
+function buildAdminTasksPayload(
+  deps: OperatorUiDependencies,
+): Record<string, unknown> {
   const groups = deps.getGroups();
   const tasks = groups
     .flatMap((group) =>
-      enrichTasks(deps.getTasks(group.folder), deps.getTaskRuns).map((task) => ({
-        ...task,
-        groupName: group.name,
-        groupFolder: group.folder,
-        chatJid: group.chatJid,
-      })),
+      enrichTasks(deps.getTasks(group.folder), deps.getTaskRuns).map(
+        (task) => ({
+          ...task,
+          groupName: group.name,
+          groupFolder: group.folder,
+          chatJid: group.chatJid,
+        }),
+      ),
     )
     .sort((a, b) => (a.next_run || '').localeCompare(b.next_run || ''));
 
@@ -3078,7 +3205,8 @@ function buildDashboardPayload(
 ): Record<string, unknown> {
   const groups = deps.getGroups();
   const resolvedChatJid = selectedChatJid || defaultSelectedChatJid(groups);
-  const selectedGroup = groups.find((group) => group.chatJid === resolvedChatJid) || null;
+  const selectedGroup =
+    groups.find((group) => group.chatJid === resolvedChatJid) || null;
 
   const detail = selectedGroup ? buildGroupDetail(deps, selectedGroup) : null;
 
@@ -3110,19 +3238,22 @@ function buildDashboardPayload(
   };
 }
 
-function validateTaskInput(payload: Record<string, unknown>): {
-  ok: true;
-  chatJid: string;
-  groupFolder: string;
-  prompt: string;
-  scheduleType: 'cron' | 'interval' | 'once';
-  scheduleValue: string;
-  contextMode: 'group' | 'isolated';
-} | {
-  ok: false;
-  error: string;
-} {
-  const prompt = typeof payload.prompt === 'string' ? payload.prompt.trim() : '';
+function validateTaskInput(payload: Record<string, unknown>):
+  | {
+      ok: true;
+      chatJid: string;
+      groupFolder: string;
+      prompt: string;
+      scheduleType: 'cron' | 'interval' | 'once';
+      scheduleValue: string;
+      contextMode: 'group' | 'isolated';
+    }
+  | {
+      ok: false;
+      error: string;
+    } {
+  const prompt =
+    typeof payload.prompt === 'string' ? payload.prompt.trim() : '';
   const chatJid = typeof payload.chatJid === 'string' ? payload.chatJid : '';
   const groupFolder =
     typeof payload.groupFolder === 'string' ? payload.groupFolder : '';
@@ -3133,9 +3264,10 @@ function validateTaskInput(payload: Record<string, unknown>): {
       ? payload.scheduleType
       : null;
   const scheduleValue =
-    typeof payload.scheduleValue === 'string' ? payload.scheduleValue.trim() : '';
-  const contextMode =
-    payload.contextMode === 'isolated' ? 'isolated' : 'group';
+    typeof payload.scheduleValue === 'string'
+      ? payload.scheduleValue.trim()
+      : '';
+  const contextMode = payload.contextMode === 'isolated' ? 'isolated' : 'group';
 
   if (!chatJid || !groupFolder || !prompt || !scheduleType || !scheduleValue) {
     return { ok: false, error: 'Task form is incomplete.' };
@@ -3150,12 +3282,18 @@ function validateTaskInput(payload: Record<string, unknown>): {
   } else if (scheduleType === 'interval') {
     const ms = parseInt(scheduleValue, 10);
     if (isNaN(ms) || ms <= 0) {
-      return { ok: false, error: 'Interval must be a positive millisecond value.' };
+      return {
+        ok: false,
+        error: 'Interval must be a positive millisecond value.',
+      };
     }
   } else {
     const date = new Date(scheduleValue);
     if (isNaN(date.getTime())) {
-      return { ok: false, error: 'Once schedule must be a valid local timestamp.' };
+      return {
+        ok: false,
+        error: 'Once schedule must be a valid local timestamp.',
+      };
     }
   }
 
@@ -3216,7 +3354,9 @@ async function handleApiRequest(
   }
 
   if (req.method === 'GET' && url.pathname.startsWith('/api/admin/groups/')) {
-    const chatJid = decodeURIComponent(url.pathname.replace('/api/admin/groups/', ''));
+    const chatJid = decodeURIComponent(
+      url.pathname.replace('/api/admin/groups/', ''),
+    );
     const group = deps.getGroups().find((entry) => entry.chatJid === chatJid);
     if (!group) {
       writeJson(res, 404, { ok: false, error: 'Group not found.' });
@@ -3228,7 +3368,10 @@ async function handleApiRequest(
 
   if (req.method === 'GET' && deps.personalOps) {
     if (url.pathname === '/api/connections') {
-      writeJson(res, 200, { ok: true, connections: deps.personalOps.listConnections() });
+      writeJson(res, 200, {
+        ok: true,
+        connections: deps.personalOps.listConnections(),
+      });
       return;
     }
     if (url.pathname === '/api/today') {
@@ -3246,7 +3389,10 @@ async function handleApiRequest(
       return;
     }
     if (url.pathname === '/api/calendar') {
-      writeJson(res, 200, { ok: true, calendar: deps.personalOps.getCalendar() });
+      writeJson(res, 200, {
+        ok: true,
+        calendar: deps.personalOps.getCalendar(),
+      });
       return;
     }
     if (url.pathname === '/api/workboard') {
@@ -3363,13 +3509,20 @@ async function handleApiRequest(
         | 'morning'
         | 'standup'
         | 'wrap';
-      if (reportType !== 'morning' && reportType !== 'standup' && reportType !== 'wrap') {
+      if (
+        reportType !== 'morning' &&
+        reportType !== 'standup' &&
+        reportType !== 'wrap'
+      ) {
         writeJson(res, 404, { ok: false, error: 'Report not found.' });
         return;
       }
       writeJson(res, 200, {
         ok: true,
-        report: deps.personalOps.getReports().find((report) => report.reportType === reportType) || null,
+        report:
+          deps.personalOps
+            .getReports()
+            .find((report) => report.reportType === reportType) || null,
       });
       return;
     }
@@ -3381,7 +3534,9 @@ async function handleApiRequest(
       connectionParts[3] &&
       connectionParts[4] === 'catalog'
     ) {
-      const provider = decodeURIComponent(connectionParts[2]) as PersonalOpsProvider;
+      const provider = decodeURIComponent(
+        connectionParts[2],
+      ) as PersonalOpsProvider;
       const accountId = decodeURIComponent(connectionParts[3]);
       if (
         provider !== 'google' &&
@@ -3419,7 +3574,10 @@ async function handleApiRequest(
     return;
   }
 
-  if (url.pathname === '/api/messages' || url.pathname === '/api/admin/messages') {
+  if (
+    url.pathname === '/api/messages' ||
+    url.pathname === '/api/admin/messages'
+  ) {
     const chatJid = typeof payload.chatJid === 'string' ? payload.chatJid : '';
     const text = typeof payload.text === 'string' ? payload.text.trim() : '';
     const sender =
@@ -3432,7 +3590,10 @@ async function handleApiRequest(
         : undefined;
 
     if (!chatJid || !text) {
-      writeJson(res, 400, { ok: false, error: 'chatJid and text are required.' });
+      writeJson(res, 400, {
+        ok: false,
+        error: 'chatJid and text are required.',
+      });
       return;
     }
 
@@ -3445,7 +3606,10 @@ async function handleApiRequest(
     const chatJid = typeof payload.chatJid === 'string' ? payload.chatJid : '';
     const text = typeof payload.text === 'string' ? payload.text.trim() : '';
     if (!chatJid || !text) {
-      writeJson(res, 400, { ok: false, error: 'chatJid and text are required.' });
+      writeJson(res, 400, {
+        ok: false,
+        error: 'chatJid and text are required.',
+      });
       return;
     }
     const ok = deps.sendInput(chatJid, text);
@@ -3454,16 +3618,25 @@ async function handleApiRequest(
       ok ? 202 : 400,
       ok
         ? { ok: true }
-        : { ok: false, error: 'Group is not active or no live container is available.' },
+        : {
+            ok: false,
+            error: 'Group is not active or no live container is available.',
+          },
     );
     return;
   }
 
-  if (url.pathname === '/api/outbound' || url.pathname === '/api/admin/outbound') {
+  if (
+    url.pathname === '/api/outbound' ||
+    url.pathname === '/api/admin/outbound'
+  ) {
     const chatJid = typeof payload.chatJid === 'string' ? payload.chatJid : '';
     const text = typeof payload.text === 'string' ? payload.text.trim() : '';
     if (!chatJid || !text) {
-      writeJson(res, 400, { ok: false, error: 'chatJid and text are required.' });
+      writeJson(res, 400, {
+        ok: false,
+        error: 'chatJid and text are required.',
+      });
       return;
     }
     const result = await deps.sendOutbound(chatJid, text);
@@ -3490,9 +3663,14 @@ async function handleApiRequest(
     }
     const item = deps.personalOps.createManualTask({
       title,
-      notes: typeof payload.notes === 'string' ? payload.notes.trim() || undefined : undefined,
+      notes:
+        typeof payload.notes === 'string'
+          ? payload.notes.trim() || undefined
+          : undefined,
       dueDate:
-        typeof payload.dueDate === 'string' ? payload.dueDate.trim() || undefined : undefined,
+        typeof payload.dueDate === 'string'
+          ? payload.dueDate.trim() || undefined
+          : undefined,
       priority:
         payload.priority === 'low' ||
         payload.priority === 'medium' ||
@@ -3501,9 +3679,13 @@ async function handleApiRequest(
           ? payload.priority
           : undefined,
       clientId:
-        typeof payload.clientId === 'string' ? payload.clientId.trim() || undefined : undefined,
+        typeof payload.clientId === 'string'
+          ? payload.clientId.trim() || undefined
+          : undefined,
       projectId:
-        typeof payload.projectId === 'string' ? payload.projectId.trim() || undefined : undefined,
+        typeof payload.projectId === 'string'
+          ? payload.projectId.trim() || undefined
+          : undefined,
     });
     writeJson(res, 201, { ok: true, item });
     return;
@@ -3517,11 +3699,18 @@ async function handleApiRequest(
     }
     const note = deps.personalOps.createManualNote({
       title,
-      body: typeof payload.body === 'string' ? payload.body.trim() || undefined : undefined,
+      body:
+        typeof payload.body === 'string'
+          ? payload.body.trim() || undefined
+          : undefined,
       clientId:
-        typeof payload.clientId === 'string' ? payload.clientId.trim() || undefined : undefined,
+        typeof payload.clientId === 'string'
+          ? payload.clientId.trim() || undefined
+          : undefined,
       projectId:
-        typeof payload.projectId === 'string' ? payload.projectId.trim() || undefined : undefined,
+        typeof payload.projectId === 'string'
+          ? payload.projectId.trim() || undefined
+          : undefined,
     });
     writeJson(res, 201, { ok: true, note });
     return;
@@ -3558,7 +3747,10 @@ async function handleApiRequest(
         payload.status === 'archived'
           ? payload.status
           : undefined,
-      notes: typeof payload.notes === 'string' ? payload.notes.trim() || undefined : undefined,
+      notes:
+        typeof payload.notes === 'string'
+          ? payload.notes.trim() || undefined
+          : undefined,
       communicationPreferences:
         typeof payload.communicationPreferences === 'string'
           ? payload.communicationPreferences.trim() || undefined
@@ -3579,13 +3771,23 @@ async function handleApiRequest(
       id: id || undefined,
       name,
       clientId:
-        typeof payload.clientId === 'string' ? payload.clientId.trim() || undefined : undefined,
-      notes: typeof payload.notes === 'string' ? payload.notes.trim() || undefined : undefined,
+        typeof payload.clientId === 'string'
+          ? payload.clientId.trim() || undefined
+          : undefined,
+      notes:
+        typeof payload.notes === 'string'
+          ? payload.notes.trim() || undefined
+          : undefined,
       deadline:
-        typeof payload.deadline === 'string' ? payload.deadline.trim() || undefined : undefined,
+        typeof payload.deadline === 'string'
+          ? payload.deadline.trim() || undefined
+          : undefined,
       tags:
         typeof payload.tags === 'string'
-          ? payload.tags.split(',').map((tag) => tag.trim()).filter(Boolean)
+          ? payload.tags
+              .split(',')
+              .map((tag) => tag.trim())
+              .filter(Boolean)
           : undefined,
     });
     writeJson(res, 201, { ok: true, project });
@@ -3593,22 +3795,34 @@ async function handleApiRequest(
   }
 
   if (deps.personalOps && url.pathname === '/api/repositories') {
-    const localPath = typeof payload.localPath === 'string' ? payload.localPath.trim() : '';
+    const localPath =
+      typeof payload.localPath === 'string' ? payload.localPath.trim() : '';
     if (!localPath) {
       writeJson(res, 400, { ok: false, error: 'localPath is required.' });
       return;
     }
     const repository = deps.personalOps.upsertRepository({
       id:
-        typeof payload.id === 'string' ? payload.id.trim() || undefined : undefined,
+        typeof payload.id === 'string'
+          ? payload.id.trim() || undefined
+          : undefined,
       name:
-        typeof payload.name === 'string' ? payload.name.trim() || undefined : undefined,
+        typeof payload.name === 'string'
+          ? payload.name.trim() || undefined
+          : undefined,
       localPath,
       clientId:
-        typeof payload.clientId === 'string' ? payload.clientId.trim() || undefined : undefined,
+        typeof payload.clientId === 'string'
+          ? payload.clientId.trim() || undefined
+          : undefined,
       projectId:
-        typeof payload.projectId === 'string' ? payload.projectId.trim() || undefined : undefined,
-      notes: typeof payload.notes === 'string' ? payload.notes.trim() || undefined : undefined,
+        typeof payload.projectId === 'string'
+          ? payload.projectId.trim() || undefined
+          : undefined,
+      notes:
+        typeof payload.notes === 'string'
+          ? payload.notes.trim() || undefined
+          : undefined,
     });
     writeJson(res, 201, { ok: true, repository });
     return;
@@ -3617,7 +3831,9 @@ async function handleApiRequest(
   if (deps.personalOps && url.pathname === '/api/repositories/discover') {
     const repositories = deps.personalOps.discoverRepositories({
       rootPath:
-        typeof payload.rootPath === 'string' ? payload.rootPath.trim() || undefined : undefined,
+        typeof payload.rootPath === 'string'
+          ? payload.rootPath.trim() || undefined
+          : undefined,
       maxDepth:
         typeof payload.maxDepth === 'number'
           ? payload.maxDepth
@@ -3647,7 +3863,10 @@ async function handleApiRequest(
     const field = typeof payload.field === 'string' ? payload.field.trim() : '';
     const value = typeof payload.value === 'string' ? payload.value.trim() : '';
     if (!targetType || !targetId || !field || !value) {
-      writeJson(res, 400, { ok: false, error: 'targetType, targetId, field, and value are required.' });
+      writeJson(res, 400, {
+        ok: false,
+        error: 'targetType, targetId, field, and value are required.',
+      });
       return;
     }
     const correction = deps.personalOps.recordCorrection({
@@ -3663,7 +3882,9 @@ async function handleApiRequest(
   if (deps.personalOps && url.pathname === '/api/operator-profile') {
     const profile = deps.personalOps.updateOperatorProfile({
       roleSummary:
-        typeof payload.roleSummary === 'string' ? payload.roleSummary : undefined,
+        typeof payload.roleSummary === 'string'
+          ? payload.roleSummary
+          : undefined,
       workHoursStart:
         typeof payload.workHoursStart === 'number'
           ? payload.workHoursStart
@@ -3685,7 +3906,9 @@ async function handleApiRequest(
           ? payload.escalationPreferences
           : undefined,
       assistantStyle:
-        typeof payload.assistantStyle === 'string' ? payload.assistantStyle : undefined,
+        typeof payload.assistantStyle === 'string'
+          ? payload.assistantStyle
+          : undefined,
       clientOperatingPosture:
         typeof payload.clientOperatingPosture === 'string'
           ? payload.clientOperatingPosture
@@ -3713,7 +3936,9 @@ async function handleApiRequest(
       const question = deps.personalOps.answerAssistantQuestion({
         id,
         optionId:
-          typeof payload.optionId === 'string' ? payload.optionId.trim() || null : null,
+          typeof payload.optionId === 'string'
+            ? payload.optionId.trim() || null
+            : null,
         value: typeof payload.value === 'string' ? payload.value : null,
       });
       writeJson(res, 200, { ok: true, question });
@@ -3726,7 +3951,10 @@ async function handleApiRequest(
         ? payload.reason
         : null;
     if (!reason) {
-      writeJson(res, 400, { ok: false, error: 'A valid dismiss reason is required.' });
+      writeJson(res, 400, {
+        ok: false,
+        error: 'A valid dismiss reason is required.',
+      });
       return;
     }
     const question = deps.personalOps.dismissAssistantQuestion({ id, reason });
@@ -3778,18 +4006,25 @@ async function handleApiRequest(
       return;
     }
     if (action === 'approve') {
-      writeJson(res, 200, { ok: true, ticket: deps.personalOps.approveImprovementTicket(id) });
+      writeJson(res, 200, {
+        ok: true,
+        ticket: deps.personalOps.approveImprovementTicket(id),
+      });
       return;
     }
     if (action === 'reject') {
-      writeJson(res, 200, { ok: true, ticket: deps.personalOps.rejectImprovementTicket(id) });
+      writeJson(res, 200, {
+        ok: true,
+        ticket: deps.personalOps.rejectImprovementTicket(id),
+      });
       return;
     }
     writeJson(res, 200, {
       ok: true,
       ticket: deps.personalOps.editImprovementTicket(id, {
         title: typeof payload.title === 'string' ? payload.title : undefined,
-        problem: typeof payload.problem === 'string' ? payload.problem : undefined,
+        problem:
+          typeof payload.problem === 'string' ? payload.problem : undefined,
         observedContext:
           typeof payload.observedContext === 'string'
             ? payload.observedContext
@@ -3798,7 +4033,8 @@ async function handleApiRequest(
           typeof payload.desiredBehavior === 'string'
             ? payload.desiredBehavior
             : undefined,
-        userValue: typeof payload.userValue === 'string' ? payload.userValue : undefined,
+        userValue:
+          typeof payload.userValue === 'string' ? payload.userValue : undefined,
         acceptanceCriteria: Array.isArray(payload.acceptanceCriteria)
           ? payload.acceptanceCriteria
               .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
@@ -3862,18 +4098,25 @@ async function handleApiRequest(
       return;
     }
     if (action === 'approve') {
-      writeJson(res, 200, { ok: true, item: deps.personalOps.approveQueueItem(id) });
+      writeJson(res, 200, {
+        ok: true,
+        item: deps.personalOps.approveQueueItem(id),
+      });
       return;
     }
     if (action === 'reject') {
-      writeJson(res, 200, { ok: true, item: deps.personalOps.rejectQueueItem(id) });
+      writeJson(res, 200, {
+        ok: true,
+        item: deps.personalOps.rejectQueueItem(id),
+      });
       return;
     }
     writeJson(res, 200, {
       ok: true,
       item: deps.personalOps.editQueueItem(id, {
         title: typeof payload.title === 'string' ? payload.title : undefined,
-        summary: typeof payload.summary === 'string' ? payload.summary : undefined,
+        summary:
+          typeof payload.summary === 'string' ? payload.summary : undefined,
         body: typeof payload.body === 'string' ? payload.body : undefined,
         reason: typeof payload.reason === 'string' ? payload.reason : undefined,
       }),
@@ -3882,7 +4125,9 @@ async function handleApiRequest(
   }
 
   if (deps.personalOps && url.pathname.startsWith('/api/contacts/')) {
-    const contactId = decodeURIComponent(url.pathname.replace('/api/contacts/', '').replace('/link', ''));
+    const contactId = decodeURIComponent(
+      url.pathname.replace('/api/contacts/', '').replace('/link', ''),
+    );
     if (!contactId || !url.pathname.endsWith('/link')) {
       writeJson(res, 400, { ok: false, error: 'Contact id is required.' });
       return;
@@ -3890,11 +4135,17 @@ async function handleApiRequest(
     const contact = deps.personalOps.linkContact({
       contactId,
       clientId:
-        typeof payload.clientId === 'string' ? payload.clientId.trim() || null : undefined,
+        typeof payload.clientId === 'string'
+          ? payload.clientId.trim() || null
+          : undefined,
       projectId:
-        typeof payload.projectId === 'string' ? payload.projectId.trim() || null : undefined,
+        typeof payload.projectId === 'string'
+          ? payload.projectId.trim() || null
+          : undefined,
       likelyRole:
-        typeof payload.likelyRole === 'string' ? payload.likelyRole.trim() || null : undefined,
+        typeof payload.likelyRole === 'string'
+          ? payload.likelyRole.trim() || null
+          : undefined,
       importance:
         payload.importance === 'low' ||
         payload.importance === 'normal' ||
@@ -3903,16 +4154,24 @@ async function handleApiRequest(
           ? payload.importance
           : undefined,
       notes:
-        typeof payload.notes === 'string' ? payload.notes.trim() || null : undefined,
+        typeof payload.notes === 'string'
+          ? payload.notes.trim() || null
+          : undefined,
       identity:
         payload.identity && typeof payload.identity === 'object'
           ? {
-              type: (payload.identity as Record<string, unknown>).type as ContactIdentity['type'],
-              provider: (payload.identity as Record<string, unknown>).provider as ContactIdentity['provider'],
-              value: String((payload.identity as Record<string, unknown>).value || ''),
+              type: (payload.identity as Record<string, unknown>)
+                .type as ContactIdentity['type'],
+              provider: (payload.identity as Record<string, unknown>)
+                .provider as ContactIdentity['provider'],
+              value: String(
+                (payload.identity as Record<string, unknown>).value || '',
+              ),
               label:
-                typeof (payload.identity as Record<string, unknown>).label === 'string'
-                  ? ((payload.identity as Record<string, unknown>).label as string)
+                typeof (payload.identity as Record<string, unknown>).label ===
+                'string'
+                  ? ((payload.identity as Record<string, unknown>)
+                      .label as string)
                   : undefined,
             }
           : undefined,
@@ -3939,14 +4198,20 @@ async function handleApiRequest(
       return;
     }
     if (parts[3] === 'start') {
-      const authUrl = deps.personalOps.beginOAuth(provider, getOperatorUiBaseUrl());
+      const authUrl = deps.personalOps.beginOAuth(
+        provider,
+        getOperatorUiBaseUrl(),
+      );
       writeJson(res, 200, { ok: true, url: authUrl });
       return;
     }
     const accountId = parts[3] ? decodeURIComponent(parts[3]) : '';
     const action = parts[4] || '';
     if (!accountId || !action) {
-      writeJson(res, 400, { ok: false, error: 'Account id and action are required.' });
+      writeJson(res, 400, {
+        ok: false,
+        error: 'Account id and action are required.',
+      });
       return;
     }
     if (action === 'disconnect') {
@@ -3980,8 +4245,15 @@ async function handleApiRequest(
     parts[2] &&
     parts[3] === 'generate'
   ) {
-    const reportType = decodeURIComponent(parts[2]) as 'morning' | 'standup' | 'wrap';
-    if (reportType !== 'morning' && reportType !== 'standup' && reportType !== 'wrap') {
+    const reportType = decodeURIComponent(parts[2]) as
+      | 'morning'
+      | 'standup'
+      | 'wrap';
+    if (
+      reportType !== 'morning' &&
+      reportType !== 'standup' &&
+      reportType !== 'wrap'
+    ) {
       writeJson(res, 400, { ok: false, error: 'Unsupported report type.' });
       return;
     }
@@ -4008,12 +4280,12 @@ async function handleApiRequest(
             });
           })()
         : action === 'pause'
-        ? deps.pauseTask(taskId)
-        : action === 'resume'
-          ? deps.resumeTask(taskId)
-          : action === 'cancel'
-            ? deps.cancelTask(taskId)
-            : { ok: false as const, error: 'Unsupported task action.' };
+          ? deps.pauseTask(taskId)
+          : action === 'resume'
+            ? deps.resumeTask(taskId)
+            : action === 'cancel'
+              ? deps.cancelTask(taskId)
+              : { ok: false as const, error: 'Unsupported task action.' };
     writeJson(res, result.ok ? 200 : 400, result);
     return;
   }
@@ -4021,10 +4293,16 @@ async function handleApiRequest(
   writeJson(res, 404, { ok: false, error: 'Not found.' });
 }
 
-async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+async function handleRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
   const deps = operatorUiState.dependencies;
   if (!deps) {
-    writeJson(res, 500, { ok: false, error: 'Operator UI dependencies unavailable.' });
+    writeJson(res, 500, {
+      ok: false,
+      error: 'Operator UI dependencies unavailable.',
+    });
     return;
   }
 
@@ -4061,7 +4339,10 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
         res.end('Operator UI session token is required.');
         return;
       }
-      const authUrl = deps.personalOps.beginOAuth(provider, getOperatorUiBaseUrl());
+      const authUrl = deps.personalOps.beginOAuth(
+        provider,
+        getOperatorUiBaseUrl(),
+      );
       res.statusCode = 302;
       res.setHeader('location', authUrl);
       res.end();
@@ -4096,7 +4377,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
   if (req.method === 'GET' && hasBuiltUi()) {
     if (url.pathname !== '/') {
       const filePath = resolveStaticPath(url.pathname.slice(1));
-      if (filePath && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+      if (
+        filePath &&
+        fs.existsSync(filePath) &&
+        fs.statSync(filePath).isFile()
+      ) {
         serveStaticFile(res, filePath);
         return;
       }
@@ -4180,7 +4465,9 @@ export async function stopOperatorUi(): Promise<void> {
     return;
   }
 
-  await new Promise<void>((resolve) => operatorUiState.server!.close(() => resolve()));
+  await new Promise<void>((resolve) =>
+    operatorUiState.server!.close(() => resolve()),
+  );
   operatorUiState.server = null;
   operatorUiState.dependencies = null;
   operatorUiState.url = null;

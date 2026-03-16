@@ -32,7 +32,10 @@ class FakeRemoteControlServer extends EventEmitter {
   listen(_port: number, _host: string, callback: () => void): this {
     queueMicrotask(() => {
       if (this.mode === 'error') {
-        this.emit('error', new Error('listen EADDRINUSE: address already in use'));
+        this.emit(
+          'error',
+          new Error('listen EADDRINUSE: address already in use'),
+        );
         return;
       }
 
@@ -169,7 +172,9 @@ describe('remote-control', () => {
     );
     restoreRemoteControl();
     expect(getActiveSession()).toBeNull();
-    expect(fs.existsSync(path.join(dataDir, 'remote-control.json'))).toBe(false);
+    expect(fs.existsSync(path.join(dataDir, 'remote-control.json'))).toBe(
+      false,
+    );
   });
 
   it('stops the current session', async () => {
@@ -182,7 +187,10 @@ describe('remote-control', () => {
 
   it('surfaces bind failures when the inspector server cannot listen', async () => {
     await expect(
-      listenRemoteControlServer(new FakeRemoteControlServer('error') as any, 43123),
+      listenRemoteControlServer(
+        new FakeRemoteControlServer('error') as any,
+        43123,
+      ),
     ).resolves.toEqual({
       ok: false,
       error: 'listen EADDRINUSE: address already in use',

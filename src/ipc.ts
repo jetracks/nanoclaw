@@ -206,11 +206,19 @@ async function processPersonalOpsIpc(
     return;
   }
   if (!isMain) {
-    logger.warn({ sourceGroup }, 'Unauthorized personal ops IPC attempt blocked');
+    logger.warn(
+      { sourceGroup },
+      'Unauthorized personal ops IPC attempt blocked',
+    );
     return;
   }
   if (data.type === 'get_snapshot' && data.requestId && data.snapshotName) {
-    const responsesDir = path.join(DATA_DIR, 'ipc', sourceGroup, 'personal-ops-responses');
+    const responsesDir = path.join(
+      DATA_DIR,
+      'ipc',
+      sourceGroup,
+      'personal-ops-responses',
+    );
     fs.mkdirSync(responsesDir, { recursive: true });
     const responsePath = path.join(responsesDir, `${data.requestId}.json`);
     let output: unknown;

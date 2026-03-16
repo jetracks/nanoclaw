@@ -149,7 +149,10 @@ export async function suggestSourceClassification(input: {
       summary: input.source.summary,
       body: input.source.body,
       participants: input.source.participants,
-      senderAddress: input.source.metadata?.senderAddress || input.source.metadata?.fromAddress || null,
+      senderAddress:
+        input.source.metadata?.senderAddress ||
+        input.source.metadata?.fromAddress ||
+        null,
       toRecipientAddresses: input.source.metadata?.toRecipientAddresses || [],
       ccRecipientAddresses: input.source.metadata?.ccRecipientAddresses || [],
       bccRecipientAddresses: input.source.metadata?.bccRecipientAddresses || [],

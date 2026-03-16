@@ -31,7 +31,9 @@ describe('transcript-view', () => {
       }),
     ].join('\n');
 
-    expect(formatTranscript(transcript)).toContain('[2026-03-14T18:00:00.000Z] User');
+    expect(formatTranscript(transcript)).toContain(
+      '[2026-03-14T18:00:00.000Z] User',
+    );
     expect(formatTranscript(transcript)).toContain('Hi there.');
   });
 

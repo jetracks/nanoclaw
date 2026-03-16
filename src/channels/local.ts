@@ -239,7 +239,10 @@ export class LocalChannel implements Channel {
 
     if (req.method === 'GET' && url.pathname === '/outbox') {
       if (!this.isAuthorized(req, url)) {
-        writeJson(res, 403, { ok: false, error: 'Local channel token is required.' });
+        writeJson(res, 403, {
+          ok: false,
+          error: 'Local channel token is required.',
+        });
         return;
       }
       const chatJid = url.searchParams.get('chatJid');
@@ -252,11 +255,16 @@ export class LocalChannel implements Channel {
 
     if (req.method === 'POST' && url.pathname === '/inbound') {
       if (!this.isAuthorized(req, url)) {
-        writeJson(res, 403, { ok: false, error: 'Local channel token is required.' });
+        writeJson(res, 403, {
+          ok: false,
+          error: 'Local channel token is required.',
+        });
         return;
       }
       const contentType = req.headers['content-type'] || '';
-      const contentTypeValue = Array.isArray(contentType) ? contentType[0] || '' : contentType;
+      const contentTypeValue = Array.isArray(contentType)
+        ? contentType[0] || ''
+        : contentType;
       if (!contentTypeValue.toLowerCase().includes('application/json')) {
         writeJson(res, 415, {
           ok: false,

@@ -31,7 +31,9 @@ export function summarizePrompt(prompt: string): string {
   }
 
   return matches
-    .map(([, sender, time, content]) => `[${time}] ${sender}: ${content.trim()}`)
+    .map(
+      ([, sender, time, content]) => `[${time}] ${sender}: ${content.trim()}`,
+    )
     .join('\n');
 }
 
@@ -66,9 +68,10 @@ export function formatTranscript(rawTranscript: string): string {
     if (event.kind === 'response') {
       const outputText =
         typeof event.output_text === 'string' ? event.output_text.trim() : '';
-      return [`[${ts}] Assistant`, outputText || '(no visible response text)'].join(
-        '\n',
-      );
+      return [
+        `[${ts}] Assistant`,
+        outputText || '(no visible response text)',
+      ].join('\n');
     }
 
     if (event.kind === 'tool') {
@@ -121,7 +124,9 @@ export function extractToolEvents(
             ? event.tool_type
             : 'tool';
       const payloadSummary =
-        event.payload === undefined ? '' : JSON.stringify(event.payload).slice(0, 240);
+        event.payload === undefined
+          ? ''
+          : JSON.stringify(event.payload).slice(0, 240);
       return {
         timestamp: event.ts,
         name,

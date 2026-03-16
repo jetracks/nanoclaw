@@ -21,7 +21,9 @@ export function getCredentialProxyAuthToken(): string {
 function hasValidCredentialProxyAuth(
   headerValue: string | string[] | undefined,
 ): boolean {
-  const provided = Array.isArray(headerValue) ? headerValue[0] || '' : headerValue || '';
+  const provided = Array.isArray(headerValue)
+    ? headerValue[0] || ''
+    : headerValue || '';
   if (!provided) {
     return false;
   }
@@ -33,7 +35,10 @@ function hasValidCredentialProxyAuth(
   return timingSafeEqual(candidate, expected);
 }
 
-function buildUpstreamPath(reqUrl: string | undefined, upstreamUrl: URL): string {
+function buildUpstreamPath(
+  reqUrl: string | undefined,
+  upstreamUrl: URL,
+): string {
   const incomingUrl = new URL(reqUrl || '/', 'http://127.0.0.1');
   const upstreamBasePath = upstreamUrl.pathname.replace(/\/$/, '');
 
@@ -73,7 +78,9 @@ export function startCredentialProxy(
 
   return new Promise((resolve, reject) => {
     const server = createServer((req, res) => {
-      if (!hasValidCredentialProxyAuth(req.headers[CREDENTIAL_PROXY_AUTH_HEADER])) {
+      if (
+        !hasValidCredentialProxyAuth(req.headers[CREDENTIAL_PROXY_AUTH_HEADER])
+      ) {
         res.writeHead(403);
         res.end('Forbidden');
         return;
@@ -82,11 +89,12 @@ export function startCredentialProxy(
       req.on('data', (c) => chunks.push(c));
       req.on('end', () => {
         const body = Buffer.concat(chunks);
-        const headers: Record<string, string | number | string[] | undefined> = {
-          ...(req.headers as Record<string, string>),
-          host: upstreamUrl.host,
-          'content-length': body.length,
-        };
+        const headers: Record<string, string | number | string[] | undefined> =
+          {
+            ...(req.headers as Record<string, string>),
+            host: upstreamUrl.host,
+            'content-length': body.length,
+          };
 
         // Strip hop-by-hop headers that must not be forwarded by proxies
         delete headers['connection'];

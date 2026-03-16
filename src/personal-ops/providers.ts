@@ -1,8 +1,6 @@
 import path from 'path';
 
-import {
-  ConnectedAccountRecord,
-} from './db.js';
+import { ConnectedAccountRecord } from './db.js';
 import {
   PersonalOpsConnectionCatalog,
   PersonalOpsConnectionCatalogOption,
@@ -65,7 +63,9 @@ async function fetchJson<T>(
     },
   });
   if (!response.ok) {
-    throw new Error(`${url} returned ${response.status}: ${await response.text()}`);
+    throw new Error(
+      `${url} returned ${response.status}: ${await response.text()}`,
+    );
   }
   return (await response.json()) as T;
 }
@@ -107,7 +107,10 @@ function priorityRank(priority: PersonalOpsPriority): number {
   }
 }
 
-function maxPriority(a: PersonalOpsPriority, b: PersonalOpsPriority): PersonalOpsPriority {
+function maxPriority(
+  a: PersonalOpsPriority,
+  b: PersonalOpsPriority,
+): PersonalOpsPriority {
   return priorityRank(a) >= priorityRank(b) ? a : b;
 }
 
@@ -116,8 +119,13 @@ function cleanText(value: unknown): string {
   return value.replace(/\s+/g, ' ').trim();
 }
 
-function gmailHeader(headers: Array<{ name?: string; value?: string }>, name: string): string {
-  const header = headers.find((item) => item.name?.toLowerCase() === name.toLowerCase());
+function gmailHeader(
+  headers: Array<{ name?: string; value?: string }>,
+  name: string,
+): string {
+  const header = headers.find(
+    (item) => item.name?.toLowerCase() === name.toLowerCase(),
+  );
   return cleanText(header?.value);
 }
 
@@ -159,7 +167,10 @@ function isLikelyNoiseGmailMessage(input: {
   if (input.labelIds.includes('SPAM') || input.labelIds.includes('TRASH')) {
     return true;
   }
-  if (input.labelIds.includes('IMPORTANT') || input.labelIds.includes('STARRED')) {
+  if (
+    input.labelIds.includes('IMPORTANT') ||
+    input.labelIds.includes('STARRED')
+  ) {
     return false;
   }
   if (input.labelIds.some((label) => GMAIL_NOISE_LABELS.has(label))) {
@@ -213,7 +224,10 @@ function inferGmailPriority(input: {
   return priority;
 }
 
-function parseIsoTimestamp(value: string | undefined, fallback: string): string {
+function parseIsoTimestamp(
+  value: string | undefined,
+  fallback: string,
+): string {
   if (!value) return fallback;
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return fallback;
@@ -224,7 +238,9 @@ function normalizeSelectedIds(
   selected: string[] | undefined,
   fallback: string[],
 ): string[] {
-  const normalized = (selected || []).map((entry) => cleanText(entry)).filter(Boolean);
+  const normalized = (selected || [])
+    .map((entry) => cleanText(entry))
+    .filter(Boolean);
   return normalized.length ? normalized : fallback;
 }
 
@@ -258,7 +274,9 @@ async function fetchSlackJson<T>(
     },
   });
   if (!response.ok) {
-    throw new Error(`${url} returned ${response.status}: ${await response.text()}`);
+    throw new Error(
+      `${url} returned ${response.status}: ${await response.text()}`,
+    );
   }
   const payload = (await response.json()) as Record<string, unknown>;
   if (payload.ok === false) {
@@ -276,7 +294,11 @@ function slackTsToIso(ts: string | undefined, fallback: string): string {
   return new Date(numeric * 1000).toISOString();
 }
 
-function slackPermalink(baseUrl: string | null | undefined, channelId: string, ts: string): string | null {
+function slackPermalink(
+  baseUrl: string | null | undefined,
+  channelId: string,
+  ts: string,
+): string | null {
   if (!baseUrl) return null;
   const normalized = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
   return `${normalized}archives/${channelId}/p${ts.replace('.', '')}`;
@@ -315,7 +337,9 @@ function slackConversationLabel(
     return users.get(conversation.user || '') || 'Direct message';
   }
   if (conversation.is_mpim) {
-    return conversation.name ? conversation.name.replace(/--/g, ', ') : 'Group DM';
+    return conversation.name
+      ? conversation.name.replace(/--/g, ', ')
+      : 'Group DM';
   }
   if (conversation.name) {
     return `#${conversation.name}`;
@@ -323,11 +347,14 @@ function slackConversationLabel(
   return conversation.id;
 }
 
-function inferSlackPriority(text: string, metadata: {
-  isDirectMessage: boolean;
-  mentionsSelf: boolean;
-  isPrivateChannel: boolean;
-}): PersonalOpsPriority {
+function inferSlackPriority(
+  text: string,
+  metadata: {
+    isDirectMessage: boolean;
+    mentionsSelf: boolean;
+    isPrivateChannel: boolean;
+  },
+): PersonalOpsPriority {
   let priority = inferPriority(text);
   if (metadata.mentionsSelf) {
     priority = maxPriority(priority, 'high');
@@ -347,10 +374,10 @@ export async function fetchProviderIdentity(
 ): Promise<ProviderAccountIdentity> {
   switch (provider) {
     case 'google': {
-      const profile = await fetchJson<{ emailAddress: string; messagesTotal?: number }>(
-        'https://gmail.googleapis.com/gmail/v1/users/me/profile',
-        accessToken,
-      );
+      const profile = await fetchJson<{
+        emailAddress: string;
+        messagesTotal?: number;
+      }>('https://gmail.googleapis.com/gmail/v1/users/me/profile', accessToken);
       return {
         accountLabel: profile.emailAddress,
         accountId: profile.emailAddress,
@@ -367,14 +394,19 @@ export async function fetchProviderIdentity(
         accessToken,
       );
       return {
-        accountLabel: cleanText(me.mail || me.userPrincipalName || me.displayName || me.id),
+        accountLabel: cleanText(
+          me.mail || me.userPrincipalName || me.displayName || me.id,
+        ),
         accountId: me.id,
       };
     }
     case 'jira': {
       const resources = await fetchJson<
         Array<{ id: string; name: string; url: string }>
-      >('https://api.atlassian.com/oauth/token/accessible-resources', accessToken);
+      >(
+        'https://api.atlassian.com/oauth/token/accessible-resources',
+        accessToken,
+      );
       if (resources.length === 0) {
         throw new Error('Jira accessible resources returned no sites.');
       }
@@ -396,7 +428,8 @@ export async function fetchProviderIdentity(
         throw new Error('Slack auth.test did not return a team id.');
       }
       return {
-        accountLabel: cleanText(auth.team) || cleanText(auth.url) || auth.team_id,
+        accountLabel:
+          cleanText(auth.team) || cleanText(auth.url) || auth.team_id,
         accountId: auth.team_id,
         baseUrl: cleanText(auth.url) || null,
         resourceId: cleanText(auth.user_id) || null,
@@ -429,10 +462,16 @@ export async function fetchProviderConnectionCatalog(input: {
       const [labels, calendars] = await Promise.all([
         fetchJson<{
           labels?: Array<{ id?: string; name?: string; type?: string }>;
-        }>('https://gmail.googleapis.com/gmail/v1/users/me/labels', account.accessToken),
+        }>(
+          'https://gmail.googleapis.com/gmail/v1/users/me/labels',
+          account.accessToken,
+        ),
         fetchJson<{
           items?: Array<{ id?: string; summary?: string; primary?: boolean }>;
-        }>('https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=250', account.accessToken),
+        }>(
+          'https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=250',
+          account.accessToken,
+        ),
       ]);
       return {
         ...baseCatalog,
@@ -451,7 +490,9 @@ export async function fetchProviderConnectionCatalog(input: {
             .map((calendar) => ({
               id: cleanText(calendar.id),
               label: cleanText(calendar.summary) || cleanText(calendar.id),
-              isDefault: Boolean(calendar.primary) || cleanText(calendar.id) === 'primary',
+              isDefault:
+                Boolean(calendar.primary) ||
+                cleanText(calendar.id) === 'primary',
             }))
             .filter((calendar) => calendar.id && calendar.label),
         ),
@@ -470,7 +511,11 @@ export async function fetchProviderConnectionCatalog(input: {
           account.accessToken,
         ),
         fetchJson<{
-          value?: Array<{ id?: string; name?: string; isDefaultCalendar?: boolean }>;
+          value?: Array<{
+            id?: string;
+            name?: string;
+            isDefaultCalendar?: boolean;
+          }>;
         }>(
           'https://graph.microsoft.com/v1.0/me/calendars?$top=250&$select=id,name,isDefaultCalendar',
           account.accessToken,
@@ -487,7 +532,8 @@ export async function fetchProviderConnectionCatalog(input: {
                 typeof folder.childFolderCount === 'number'
                   ? `${folder.childFolderCount} subfolders`
                   : null,
-              isDefault: cleanText(folder.displayName).toLowerCase() === 'inbox',
+              isDefault:
+                cleanText(folder.displayName).toLowerCase() === 'inbox',
             }))
             .filter((folder) => folder.id && folder.label),
         ),
@@ -507,7 +553,11 @@ export async function fetchProviderConnectionCatalog(input: {
         return baseCatalog;
       }
       const payload = await fetchJson<{
-        values?: Array<{ key?: string; name?: string; projectTypeKey?: string }>;
+        values?: Array<{
+          key?: string;
+          name?: string;
+          projectTypeKey?: string;
+        }>;
       }>(
         `https://api.atlassian.com/ex/jira/${account.resourceId}/rest/api/3/project/search?maxResults=100`,
         account.accessToken,
@@ -642,11 +692,15 @@ async function syncGoogleData(
   const mailRefs: Array<{ id: string; threadId: string }> = [];
   let nextPageToken: string | undefined;
   do {
-    const listUrl = new URL('https://gmail.googleapis.com/gmail/v1/users/me/messages');
+    const listUrl = new URL(
+      'https://gmail.googleapis.com/gmail/v1/users/me/messages',
+    );
     listUrl.searchParams.set('maxResults', String(GMAIL_PAGE_SIZE));
     listUrl.searchParams.set(
       'q',
-      googleMailQuery ? `${googleMailQuery} after:${afterSeconds}` : `after:${afterSeconds}`,
+      googleMailQuery
+        ? `${googleMailQuery} after:${afterSeconds}`
+        : `after:${afterSeconds}`,
     );
     listUrl.searchParams.set('includeSpamTrash', 'false');
     if (!googleMailQuery) {
@@ -685,7 +739,9 @@ async function syncGoogleData(
     );
     const headers = message.payload?.headers || [];
     const occurredAt = parseIsoTimestamp(
-      message.internalDate ? new Date(Number(message.internalDate)).toISOString() : undefined,
+      message.internalDate
+        ? new Date(Number(message.internalDate)).toISOString()
+        : undefined,
       since,
     );
     if (occurredAt > newestMail) newestMail = occurredAt;
@@ -804,8 +860,13 @@ async function syncGoogleData(
             ),
           ].filter(Boolean),
           occurredAt,
-          dueAt: parseIsoTimestamp(event.end?.dateTime || event.end?.date, occurredAt),
-          priority: inferPriority(`${event.summary || ''} ${event.description || ''}`),
+          dueAt: parseIsoTimestamp(
+            event.end?.dateTime || event.end?.date,
+            occurredAt,
+          ),
+          priority: inferPriority(
+            `${event.summary || ''} ${event.description || ''}`,
+          ),
           status: 'scheduled',
           syncedAt: new Date().toISOString(),
           metadata: {
@@ -846,7 +907,10 @@ async function syncMicrosoftData(
     accountLabel: account.accountLabel,
   };
   let newestMail = since;
-  const mailFolderIds = normalizeSelectedIds(settings?.microsoftMailFolderIds, []);
+  const mailFolderIds = normalizeSelectedIds(
+    settings?.microsoftMailFolderIds,
+    [],
+  );
   const folderCatalog = mailFolderIds.length
     ? await fetchJson<{
         value?: Array<{ id?: string; displayName?: string }>;
@@ -889,9 +953,15 @@ async function syncMicrosoftData(
         importance?: string;
         from?: { emailAddress?: { address?: string; name?: string } };
         sender?: { emailAddress?: { address?: string; name?: string } };
-        toRecipients?: Array<{ emailAddress?: { address?: string; name?: string } }>;
-        ccRecipients?: Array<{ emailAddress?: { address?: string; name?: string } }>;
-        bccRecipients?: Array<{ emailAddress?: { address?: string; name?: string } }>;
+        toRecipients?: Array<{
+          emailAddress?: { address?: string; name?: string };
+        }>;
+        ccRecipients?: Array<{
+          emailAddress?: { address?: string; name?: string };
+        }>;
+        bccRecipients?: Array<{
+          emailAddress?: { address?: string; name?: string };
+        }>;
       }>;
     }>(messageSource.url, account.accessToken);
     for (const message of messages.value || []) {
@@ -903,21 +973,28 @@ async function syncMicrosoftData(
         message.from?.emailAddress?.address || message.from?.emailAddress?.name,
       );
       const senderAddress = cleanText(
-        message.sender?.emailAddress?.address || message.sender?.emailAddress?.name,
+        message.sender?.emailAddress?.address ||
+          message.sender?.emailAddress?.name,
       );
       const toRecipientAddresses = (message.toRecipients || [])
         .map((recipient) =>
-          cleanText(recipient.emailAddress?.address || recipient.emailAddress?.name),
+          cleanText(
+            recipient.emailAddress?.address || recipient.emailAddress?.name,
+          ),
         )
         .filter(Boolean);
       const ccRecipientAddresses = (message.ccRecipients || [])
         .map((recipient) =>
-          cleanText(recipient.emailAddress?.address || recipient.emailAddress?.name),
+          cleanText(
+            recipient.emailAddress?.address || recipient.emailAddress?.name,
+          ),
         )
         .filter(Boolean);
       const bccRecipientAddresses = (message.bccRecipients || [])
         .map((recipient) =>
-          cleanText(recipient.emailAddress?.address || recipient.emailAddress?.name),
+          cleanText(
+            recipient.emailAddress?.address || recipient.emailAddress?.name,
+          ),
         )
         .filter(Boolean);
       mailRecords.push({
@@ -939,14 +1016,17 @@ async function syncMicrosoftData(
             ...bccRecipientAddresses,
           ].filter(Boolean),
           occurredAt,
-          priority: inferPriority(`${message.importance || ''} ${title} ${preview}`),
+          priority: inferPriority(
+            `${message.importance || ''} ${title} ${preview}`,
+          ),
           status: 'received',
           syncedAt: new Date().toISOString(),
           metadata: {
             conversationId: message.conversationId,
             mailFolderId: messageSource.folderId,
             mailFolderLabel: messageSource.folderId
-              ? folderLabels.get(messageSource.folderId) || messageSource.folderId
+              ? folderLabels.get(messageSource.folderId) ||
+                messageSource.folderId
               : 'Inbox',
             fromAddress,
             senderAddress,
@@ -960,12 +1040,18 @@ async function syncMicrosoftData(
     }
   }
 
-  const calendarWindowStart = startOfDay(plusDays(new Date(), -14)).toISOString();
+  const calendarWindowStart = startOfDay(
+    plusDays(new Date(), -14),
+  ).toISOString();
   const calendarWindowEnd = plusDays(new Date(), 45).toISOString();
   const calendarIds = normalizeSelectedIds(settings?.microsoftCalendarIds, []);
   const calendarsCatalog = calendarIds.length
     ? await fetchJson<{
-        value?: Array<{ id?: string; name?: string; isDefaultCalendar?: boolean }>;
+        value?: Array<{
+          id?: string;
+          name?: string;
+          isDefaultCalendar?: boolean;
+        }>;
       }>(
         'https://graph.microsoft.com/v1.0/me/calendars?$top=250&$select=id,name,isDefaultCalendar',
         account.accessToken,
@@ -993,7 +1079,9 @@ async function syncMicrosoftData(
       })
     : [
         (() => {
-          const url = new URL('https://graph.microsoft.com/v1.0/me/calendarView');
+          const url = new URL(
+            'https://graph.microsoft.com/v1.0/me/calendarView',
+          );
           url.searchParams.set('startDateTime', calendarWindowStart);
           url.searchParams.set('endDateTime', calendarWindowEnd);
           url.searchParams.set(
@@ -1014,7 +1102,9 @@ async function syncMicrosoftData(
         webLink?: string;
         start?: { dateTime?: string; timeZone?: string };
         end?: { dateTime?: string; timeZone?: string };
-        attendees?: Array<{ emailAddress?: { address?: string; name?: string } }>;
+        attendees?: Array<{
+          emailAddress?: { address?: string; name?: string };
+        }>;
         organizer?: { emailAddress?: { address?: string; name?: string } };
       }>;
     }>(calendarSource.url, account.accessToken);
@@ -1047,7 +1137,9 @@ async function syncMicrosoftData(
           ].filter(Boolean),
           occurredAt,
           dueAt: parseIsoTimestamp(event.end?.dateTime, occurredAt),
-          priority: inferPriority(`${event.subject || ''} ${event.bodyPreview || ''}`),
+          priority: inferPriority(
+            `${event.subject || ''} ${event.bodyPreview || ''}`,
+          ),
           status: 'scheduled',
           syncedAt: new Date().toISOString(),
           metadata: {
@@ -1055,7 +1147,8 @@ async function syncMicrosoftData(
             end: event.end,
             calendarId: calendarSource.calendarId,
             calendarLabel: calendarSource.calendarId
-              ? calendarLabels.get(calendarSource.calendarId) || calendarSource.calendarId
+              ? calendarLabels.get(calendarSource.calendarId) ||
+                calendarSource.calendarId
               : 'Default calendar',
           },
         },
@@ -1300,7 +1393,9 @@ async function syncSlackData(
       const actorLabel = actorId ? await loadUserLabel(actorId) : 'Slack app';
       const channelLabel = slackConversationLabel(conversation, userCache);
       const isDirectMessage = Boolean(conversation.is_im);
-      const mentionsSelf = Boolean(account.resourceId && text.includes(`<@${account.resourceId}>`));
+      const mentionsSelf = Boolean(
+        account.resourceId && text.includes(`<@${account.resourceId}>`),
+      );
       const priority = inferSlackPriority(text, {
         isDirectMessage,
         mentionsSelf,
@@ -1317,7 +1412,11 @@ async function syncSlackData(
             message.thread_ts && message.thread_ts !== message.ts
               ? `${conversation.id}:${message.thread_ts}`
               : conversation.id,
-          sourceUrl: slackPermalink(account.baseUrl, conversation.id, message.ts || ''),
+          sourceUrl: slackPermalink(
+            account.baseUrl,
+            conversation.id,
+            message.ts || '',
+          ),
           title: `${channelLabel} • ${text.slice(0, 96) || '(message)'}`,
           summary: text.slice(0, 220),
           body: text,

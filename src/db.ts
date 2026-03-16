@@ -746,7 +746,10 @@ function migrateJsonState(): void {
   }
 
   // Migrate sessions.json
-  const sessions = migrateFile('sessions.json') as Record<string, string> | null;
+  const sessions = migrateFile('sessions.json') as Record<
+    string,
+    string
+  > | null;
   if (sessions) {
     for (const [folder, sessionId] of Object.entries(sessions)) {
       const normalized = normalizeSessionState(sessionId);

@@ -257,7 +257,9 @@ describe('container-runner timeout behavior', () => {
     const args = vi.mocked(spawn).mock.calls[0]?.[1] as string[];
     expect(
       args.some((arg) =>
-        String(arg).includes('/tmp/nanoclaw-test-groups/global:/workspace/global'),
+        String(arg).includes(
+          '/tmp/nanoclaw-test-groups/global:/workspace/global',
+        ),
       ),
     ).toBe(true);
   });
@@ -281,9 +283,7 @@ describe('container-runner timeout behavior', () => {
     expect(args).toContain('NODE_OPTIONS=--dns-result-order=ipv4first');
     expect(args).not.toContain('--user');
     expect(args).not.toContain('--add-host=host.docker.internal:host-gateway');
-    expect(args).toContain(
-      'OPENAI_BASE_URL=http://192.168.64.1:3001/v1',
-    );
+    expect(args).toContain('OPENAI_BASE_URL=http://192.168.64.1:3001/v1');
     expect(
       args.some((arg) => String(arg).startsWith('NANOCLAW_PROXY_TOKEN=')),
     ).toBe(true);

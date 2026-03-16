@@ -36,7 +36,9 @@ export function containerHostGateway(
   runtime: ContainerRuntime = CONTAINER_RUNTIME,
 ): string {
   if (process.env.CONTAINER_HOST_GATEWAY || envConfig.CONTAINER_HOST_GATEWAY) {
-    return process.env.CONTAINER_HOST_GATEWAY || envConfig.CONTAINER_HOST_GATEWAY!;
+    return (
+      process.env.CONTAINER_HOST_GATEWAY || envConfig.CONTAINER_HOST_GATEWAY!
+    );
   }
 
   if (runtime === 'apple-container') {
@@ -116,10 +118,7 @@ export function mountArgs(
   readonly: boolean,
   _runtime: ContainerRuntime = CONTAINER_RUNTIME,
 ): string[] {
-  return [
-    '--volume',
-    `${hostPath}:${containerPath}${readonly ? ':ro' : ''}`,
-  ];
+  return ['--volume', `${hostPath}:${containerPath}${readonly ? ':ro' : ''}`];
 }
 
 /** Returns CLI args for a readonly bind mount. */
@@ -239,12 +238,8 @@ export function ensureContainerRuntimeRunning(
     console.error(
       '║  Agents cannot run without a container runtime. To fix:        ║',
     );
-    console.error(
-      `║  1. Ensure ${runtimeName.padEnd(54)}║`,
-    );
-    console.error(
-      `║  2. Run: ${healthcheck.padEnd(52)}║`,
-    );
+    console.error(`║  1. Ensure ${runtimeName.padEnd(54)}║`);
+    console.error(`║  2. Run: ${healthcheck.padEnd(52)}║`);
     console.error(
       '║  3. Restart NanoClaw                                           ║',
     );

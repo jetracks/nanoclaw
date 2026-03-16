@@ -111,8 +111,9 @@ const PERSONAL_OPS_COMMANDS = new Set([
 
 function getMainGroupJid(): string | null {
   return (
-    Object.entries(registeredGroups).find(([, group]) => group.isMain === true)?.[0] ||
-    null
+    Object.entries(registeredGroups).find(
+      ([, group]) => group.isMain === true,
+    )?.[0] || null
   );
 }
 
@@ -567,11 +568,18 @@ async function main(): Promise<void> {
           chatJid,
           name: group.name,
           folder: group.folder,
-          active: queueState?.active === true && queueState.isTaskContainer !== true,
+          active:
+            queueState?.active === true && queueState.isTaskContainer !== true,
           idleWaiting: queueState?.idleWaiting === true,
           transcriptPath:
             session?.transcriptPath ||
-            path.join(DATA_DIR, 'sessions', group.folder, 'openai', 'current-transcript.jsonl'),
+            path.join(
+              DATA_DIR,
+              'sessions',
+              group.folder,
+              'openai',
+              'current-transcript.jsonl',
+            ),
           previousResponseId: session?.previousResponseId,
         };
       });
@@ -615,7 +623,7 @@ async function main(): Promise<void> {
     const channel = findChannel(channels, chatJid);
     if (!channel) return;
 
-      if (command === '/remote-control') {
+    if (command === '/remote-control') {
       const result = await startRemoteControl(msg.sender, chatJid);
       if (result.ok) {
         await sendOutboundMessage(chatJid, result.url);
@@ -782,9 +790,13 @@ async function main(): Promise<void> {
   const operatorUiStart = await startOperatorUi({
     getGroups: () => {
       const inspectable = new Map(
-        queue.getInspectableStates().map((state) => [state.groupJid, state] as const),
+        queue
+          .getInspectableStates()
+          .map((state) => [state.groupJid, state] as const),
       );
-      const chats = new Map(getAllChats().map((chat) => [chat.jid, chat] as const));
+      const chats = new Map(
+        getAllChats().map((chat) => [chat.jid, chat] as const),
+      );
 
       return Object.entries(registeredGroups).map(([chatJid, group]) => {
         const queueState = inspectable.get(chatJid);
@@ -817,7 +829,8 @@ async function main(): Promise<void> {
         };
       });
     },
-    getMessages: (chatJid, limit) => getRecentConversationMessages(chatJid, limit),
+    getMessages: (chatJid, limit) =>
+      getRecentConversationMessages(chatJid, limit),
     getTasks: (groupFolder) => getTasksForGroup(groupFolder),
     getTaskRuns: (taskId, limit) => getTaskRunLogs(taskId, limit),
     injectMessage: (chatJid, text, sender, senderName) => {
@@ -856,7 +869,10 @@ async function main(): Promise<void> {
     }) => {
       const group = registeredGroups[chatJid];
       if (!group || group.folder !== groupFolder) {
-        return { ok: false, error: 'Task target does not match a registered group.' };
+        return {
+          ok: false,
+          error: 'Task target does not match a registered group.',
+        };
       }
 
       let nextRun: string | null = null;
@@ -864,7 +880,9 @@ async function main(): Promise<void> {
         try {
           nextRun = CronExpressionParser.parse(scheduleValue, {
             tz: TIMEZONE,
-          }).next().toISOString();
+          })
+            .next()
+            .toISOString();
         } catch {
           return { ok: false, error: 'Invalid cron expression.' };
         }
@@ -917,7 +935,9 @@ async function main(): Promise<void> {
         try {
           nextRun = CronExpressionParser.parse(scheduleValue, {
             tz: TIMEZONE,
-          }).next().toISOString();
+          })
+            .next()
+            .toISOString();
         } catch {
           return { ok: false, error: 'Invalid cron expression.' };
         }
@@ -1006,7 +1026,8 @@ async function main(): Promise<void> {
           acceptMemoryFact: (id) => personalOpsService.acceptMemoryFact(id),
           rejectMemoryFact: (id) => personalOpsService.rejectMemoryFact(id),
           getReviewQueue: () => personalOpsService.getReviewQueue(),
-          getImprovementTickets: () => personalOpsService.getImprovementTickets(),
+          getImprovementTickets: () =>
+            personalOpsService.getImprovementTickets(),
           approveImprovementTicket: (id) =>
             personalOpsService.approveImprovementTicket(id),
           rejectImprovementTicket: (id) =>
@@ -1036,14 +1057,18 @@ async function main(): Promise<void> {
               input.settings,
             ),
           syncProvider: (input) => personalOpsService.syncProvider(input),
-          createManualTask: (input) => personalOpsService.createManualTask(input),
-          createManualNote: (input) => personalOpsService.createManualNote(input),
+          createManualTask: (input) =>
+            personalOpsService.createManualTask(input),
+          createManualNote: (input) =>
+            personalOpsService.createManualNote(input),
           upsertClient: (input) => personalOpsService.upsertClient(input),
           upsertProject: (input) => personalOpsService.upsertProject(input),
-          upsertRepository: (input) => personalOpsService.upsertRepository(input),
+          upsertRepository: (input) =>
+            personalOpsService.upsertRepository(input),
           discoverRepositories: (input) =>
             personalOpsService.discoverRepositories(input),
-          recordCorrection: (input) => personalOpsService.recordCorrection(input),
+          recordCorrection: (input) =>
+            personalOpsService.recordCorrection(input),
         }
       : undefined,
   });

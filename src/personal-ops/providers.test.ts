@@ -25,8 +25,17 @@ describe('personal-ops google provider sync', () => {
 
   it('pages inbox mail, excludes spam/trash at query time, and marks noisy mail', async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-      if (url.startsWith('https://gmail.googleapis.com/gmail/v1/users/me/messages?')) {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
+      if (
+        url.startsWith(
+          'https://gmail.googleapis.com/gmail/v1/users/me/messages?',
+        )
+      ) {
         const parsed = new URL(url);
         expect(parsed.searchParams.get('maxResults')).toBe('100');
         expect(parsed.searchParams.get('includeSpamTrash')).toBe('false');
@@ -76,7 +85,10 @@ describe('personal-ops google provider sync', () => {
               { name: 'From', value: 'Deals <noreply@promo.example.com>' },
               { name: 'To', value: 'Jerry <jerry@example.com>' },
               { name: 'Date', value: 'Sat, 14 Mar 2026 11:00:00 -0700' },
-              { name: 'List-Unsubscribe', value: '<mailto:unsubscribe@example.com>' },
+              {
+                name: 'List-Unsubscribe',
+                value: '<mailto:unsubscribe@example.com>',
+              },
               { name: 'Precedence', value: 'bulk' },
             ],
           },
@@ -101,11 +113,19 @@ describe('personal-ops google provider sync', () => {
         });
       }
 
-      if (url.startsWith('https://www.googleapis.com/calendar/v3/calendars/primary/events?')) {
+      if (
+        url.startsWith(
+          'https://www.googleapis.com/calendar/v3/calendars/primary/events?',
+        )
+      ) {
         return jsonResponse({ items: [] });
       }
 
-      if (url.startsWith('https://www.googleapis.com/calendar/v3/users/me/calendarList?')) {
+      if (
+        url.startsWith(
+          'https://www.googleapis.com/calendar/v3/users/me/calendarList?',
+        )
+      ) {
         return jsonResponse({
           items: [{ id: 'primary', summary: 'Primary', primary: true }],
         });
@@ -148,7 +168,9 @@ describe('personal-ops google provider sync', () => {
     expect(emailRecords).toHaveLength(3);
     expect(batch.cursors.email).toBe('2026-03-14T18:00:00.000Z');
 
-    const important = emailRecords.find((entry) => entry.externalId === 'msg-1');
+    const important = emailRecords.find(
+      (entry) => entry.externalId === 'msg-1',
+    );
     expect(important?.priority).toBe('urgent');
     expect(important?.accountId).toBe('jerry@example.com');
     expect(important?.accountLabel).toBe('jerry@example.com');
@@ -167,15 +189,30 @@ describe('personal-ops google provider sync', () => {
 
   it('respects a custom Gmail query and selected calendars', async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-      if (url.startsWith('https://gmail.googleapis.com/gmail/v1/users/me/messages?')) {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.toString()
+            : input.url;
+      if (
+        url.startsWith(
+          'https://gmail.googleapis.com/gmail/v1/users/me/messages?',
+        )
+      ) {
         const parsed = new URL(url);
-        expect(parsed.searchParams.get('q')).toContain('label:important after:');
+        expect(parsed.searchParams.get('q')).toContain(
+          'label:important after:',
+        );
         expect(parsed.searchParams.getAll('labelIds')).toEqual([]);
         return jsonResponse({ messages: [] });
       }
 
-      if (url.startsWith('https://www.googleapis.com/calendar/v3/users/me/calendarList?')) {
+      if (
+        url.startsWith(
+          'https://www.googleapis.com/calendar/v3/users/me/calendarList?',
+        )
+      ) {
         return jsonResponse({
           items: [
             { id: 'primary', summary: 'Primary', primary: true },
@@ -272,7 +309,11 @@ describe('personal-ops microsoft provider sync', () => {
             ? input.toString()
             : input.url;
 
-      if (url.startsWith('https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?')) {
+      if (
+        url.startsWith(
+          'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?',
+        )
+      ) {
         return jsonResponse({ value: [] });
       }
 
@@ -301,7 +342,12 @@ describe('personal-ops microsoft provider sync', () => {
                 timeZone: 'UTC',
               },
               attendees: [
-                { emailAddress: { address: 'jerry@bettymills.com', name: 'Jerry' } },
+                {
+                  emailAddress: {
+                    address: 'jerry@bettymills.com',
+                    name: 'Jerry',
+                  },
+                },
               ],
               organizer: {
                 emailAddress: { address: 'ops@bettymills.com', name: 'Ops' },
@@ -475,15 +521,23 @@ describe('personal-ops slack provider sync', () => {
 
     const messages = batch.records.map((entry) => entry.source);
     expect(messages).toHaveLength(2);
-    expect(messages.every((entry) => entry.kind === 'slack_message')).toBe(true);
+    expect(messages.every((entry) => entry.kind === 'slack_message')).toBe(
+      true,
+    );
 
-    const channelMessage = messages.find((entry) => entry.externalId.startsWith('C123:'));
+    const channelMessage = messages.find((entry) =>
+      entry.externalId.startsWith('C123:'),
+    );
     expect(channelMessage?.metadata?.channelLabel).toBe('#dynecom-dev');
     expect(channelMessage?.metadata?.mentionsSelf).toBe(true);
     expect(channelMessage?.priority).toBe('high');
-    expect(channelMessage?.sourceUrl).toContain('/archives/C123/p1710439200000100');
+    expect(channelMessage?.sourceUrl).toContain(
+      '/archives/C123/p1710439200000100',
+    );
 
-    const dmMessage = messages.find((entry) => entry.externalId.startsWith('D456:'));
+    const dmMessage = messages.find((entry) =>
+      entry.externalId.startsWith('D456:'),
+    );
     expect(dmMessage?.metadata?.channelType).toBe('dm');
     expect(dmMessage?.metadata?.authorLabel).toBe('Jerry');
     expect(dmMessage?.priority).toBe('urgent');
@@ -504,8 +558,18 @@ describe('personal-ops slack provider sync', () => {
         return jsonResponse({
           ok: true,
           channels: [
-            { id: 'C123', name: 'dynecom-dev', is_member: true, updated: 1710435600 },
-            { id: 'C999', name: 'random', is_member: true, updated: 1710435601 },
+            {
+              id: 'C123',
+              name: 'dynecom-dev',
+              is_member: true,
+              updated: 1710435600,
+            },
+            {
+              id: 'C999',
+              name: 'random',
+              is_member: true,
+              updated: 1710435601,
+            },
           ],
           response_metadata: { next_cursor: '' },
         });
@@ -571,11 +635,17 @@ describe('personal-ops slack provider sync', () => {
     const messages = batch.records.map((entry) => entry.source);
     expect(messages).toHaveLength(1);
     expect(messages[0].metadata?.channelId).toBe('C123');
-    expect(fetchMock.mock.calls.some((call) => {
-      const arg = call[0];
-      const url =
-        typeof arg === 'string' ? arg : arg instanceof URL ? arg.toString() : arg.url;
-      return url.includes('channel=C999');
-    })).toBe(false);
+    expect(
+      fetchMock.mock.calls.some((call) => {
+        const arg = call[0];
+        const url =
+          typeof arg === 'string'
+            ? arg
+            : arg instanceof URL
+              ? arg.toString()
+              : arg.url;
+        return url.includes('channel=C999');
+      }),
+    ).toBe(false);
   });
 });

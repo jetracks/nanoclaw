@@ -29,7 +29,10 @@ vi.mock('./personal-ops/ai.js', () => ({
 
 const mockedProviders = vi.hoisted(() => ({
   syncProviderData: vi.fn(),
-  fetchProviderConnectionCatalog: vi.fn(async () => ({ provider: 'microsoft', options: [] })),
+  fetchProviderConnectionCatalog: vi.fn(async () => ({
+    provider: 'microsoft',
+    options: [],
+  })),
   fetchProviderIdentity: vi.fn(async () => ({
     accountId: 'mock-account',
     accountLabel: 'mock-account',
@@ -37,13 +40,14 @@ const mockedProviders = vi.hoisted(() => ({
 }));
 
 vi.mock('./personal-ops/providers.js', async () => {
-  const actual = await vi.importActual<typeof import('./personal-ops/providers.js')>(
-    './personal-ops/providers.js',
-  );
+  const actual = await vi.importActual<
+    typeof import('./personal-ops/providers.js')
+  >('./personal-ops/providers.js');
   return {
     ...actual,
     syncProviderData: mockedProviders.syncProviderData,
-    fetchProviderConnectionCatalog: mockedProviders.fetchProviderConnectionCatalog,
+    fetchProviderConnectionCatalog:
+      mockedProviders.fetchProviderConnectionCatalog,
     fetchProviderIdentity: mockedProviders.fetchProviderIdentity,
   };
 });
@@ -172,7 +176,10 @@ describe('personal-ops service', () => {
         title: 'Please review under-shipped PO',
         summary: 'Jerry, can you review this under-shipped PO issue today?',
         body: 'Jerry, can you review this under-shipped PO issue today?',
-        participants: ['Vendor <vendor@example.com>', 'Jerry <jerry@bettymills.com>'],
+        participants: [
+          'Vendor <vendor@example.com>',
+          'Jerry <jerry@bettymills.com>',
+        ],
         occurredAt: isoMinutesAgo(10),
         priority: 'high' as const,
         status: 'received',
@@ -210,10 +217,16 @@ describe('personal-ops service', () => {
       upsertSourceRecord(source);
       (service as any).materializeDerivedRecords(source);
 
-      expect(service.getTodayView().inbox.some((entry) => entry.externalId === 'under-shipped-1')).toBe(true);
-      expect(service.getOpenLoops().some((loop) => loop.sourceRecordKey?.includes('under-shipped-1'))).toBe(
-        true,
-      );
+      expect(
+        service
+          .getTodayView()
+          .inbox.some((entry) => entry.externalId === 'under-shipped-1'),
+      ).toBe(true);
+      expect(
+        service
+          .getOpenLoops()
+          .some((loop) => loop.sourceRecordKey?.includes('under-shipped-1')),
+      ).toBe(true);
 
       service.recordCorrection({
         targetType: 'work_item',
@@ -235,11 +248,17 @@ describe('personal-ops service', () => {
 
       expect(refreshedSource?.metadata?.workItemStatusOverride).toBe('done');
       expect(refreshedWorkItem?.status).toBe('done');
-      expect(today.inbox.some((entry) => entry.externalId === 'under-shipped-1')).toBe(false);
-      expect(today.priorities.some((item) => item.id === refreshedWorkItem?.id)).toBe(false);
-      expect(today.openLoops.some((loop) => loop.sourceRecordKey?.includes('under-shipped-1'))).toBe(
-        false,
-      );
+      expect(
+        today.inbox.some((entry) => entry.externalId === 'under-shipped-1'),
+      ).toBe(false);
+      expect(
+        today.priorities.some((item) => item.id === refreshedWorkItem?.id),
+      ).toBe(false);
+      expect(
+        today.openLoops.some((loop) =>
+          loop.sourceRecordKey?.includes('under-shipped-1'),
+        ),
+      ).toBe(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes('NODE_MODULE_VERSION')) {
@@ -290,7 +309,11 @@ describe('personal-ops service', () => {
 
       upsertSourceRecord(source);
 
-      expect(service.getTodayView().meetings.some((entry) => entry.externalId === 'move-car-1')).toBe(true);
+      expect(
+        service
+          .getTodayView()
+          .meetings.some((entry) => entry.externalId === 'move-car-1'),
+      ).toBe(true);
 
       service.recordCorrection({
         targetType: 'source_record',
@@ -308,7 +331,9 @@ describe('personal-ops service', () => {
       const today = service.getTodayView();
 
       expect(refreshedSource?.metadata?.workItemStatusOverride).toBe('done');
-      expect(today.meetings.some((entry) => entry.externalId === 'move-car-1')).toBe(false);
+      expect(
+        today.meetings.some((entry) => entry.externalId === 'move-car-1'),
+      ).toBe(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes('NODE_MODULE_VERSION')) {
@@ -389,7 +414,10 @@ describe('personal-ops service', () => {
         cursors: { calendar_event: new Date().toISOString() },
       });
 
-      await service.syncProvider({ provider: 'microsoft', accountId: 'account-1' });
+      await service.syncProvider({
+        provider: 'microsoft',
+        accountId: 'account-1',
+      });
 
       const refreshedSource = getSourceRecord(
         'microsoft',
@@ -400,7 +428,9 @@ describe('personal-ops service', () => {
 
       expect(refreshedSource?.metadata?.workItemStatusOverride).toBe('done');
       expect(
-        service.getTodayView().meetings.some((entry) => entry.externalId === 'move-car-refresh'),
+        service
+          .getTodayView()
+          .meetings.some((entry) => entry.externalId === 'move-car-refresh'),
       ).toBe(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -430,7 +460,10 @@ describe('personal-ops service', () => {
         title: 'Can you review the updated scope?',
         summary: 'Brad sent an updated scope for review.',
         body: 'Can you review the updated scope for Ezidia?',
-        participants: ['Brad C <brad.c@ezdia.com>', 'Jerry <jetracks@gmail.com>'],
+        participants: [
+          'Brad C <brad.c@ezdia.com>',
+          'Jerry <jetracks@gmail.com>',
+        ],
         occurredAt: isoMinutesAgo(25),
         priority: 'medium' as const,
         status: 'received',
@@ -461,7 +494,9 @@ describe('personal-ops service', () => {
         },
       };
 
-      const linkedContactIds = (service as any).ensureContactsFromSource(source);
+      const linkedContactIds = (service as any).ensureContactsFromSource(
+        source,
+      );
       source.linkedContactIds = linkedContactIds;
       source.metadata = {
         ...(source.metadata || {}),
@@ -548,7 +583,9 @@ describe('personal-ops service', () => {
       const historyStreams = service.getHistoryWorkstreams({
         since: isoMinutesAgo(180),
       });
-      expect(historyStreams.some((stream) => stream.key === workboard[0].key)).toBe(true);
+      expect(
+        historyStreams.some((stream) => stream.key === workboard[0].key),
+      ).toBe(true);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes('NODE_MODULE_VERSION')) {
@@ -614,7 +651,8 @@ describe('personal-ops service', () => {
         relatedClientId: client.id,
         relatedProjectId: project.id,
         summary: 'DYN-214 optimize rollout polling',
-        rawReference: 'https://github.com/jetracks/dynecom-platform/commit/sha1',
+        rawReference:
+          'https://github.com/jetracks/dynecom-platform/commit/sha1',
         metadata: {
           repoId: repository.id,
           repoName: repository.name,
@@ -629,7 +667,9 @@ describe('personal-ops service', () => {
       expect(jiraLink?.sourceCount).toBe(2);
       expect(jiraLink?.activityCount).toBe(1);
 
-      const repoLink = stream.links.find((link) => link.label === 'dynecom-platform');
+      const repoLink = stream.links.find(
+        (link) => link.label === 'dynecom-platform',
+      );
       expect(repoLink).toBeTruthy();
       expect(repoLink?.activityCount).toBe(1);
       expect(repoLink?.repositoryCount).toBe(1);
@@ -698,7 +738,9 @@ describe('personal-ops service', () => {
       expect(inbox.map((entry) => entry.externalId)).toEqual(['important-1']);
 
       const today = service.getTodayView();
-      expect(today.inbox.map((entry) => entry.externalId)).toEqual(['important-1']);
+      expect(today.inbox.map((entry) => entry.externalId)).toEqual([
+        'important-1',
+      ]);
 
       const workItems = listWorkItems({ limit: 20 });
       expect(workItems).toHaveLength(1);
@@ -716,7 +758,10 @@ describe('personal-ops service', () => {
   it('uses model action-required metadata to suppress low-relevance follow-up work', () => {
     try {
       const service = new PersonalOpsService();
-      const client = service.upsertClient({ name: 'Betty Mills', roles: ['COO'] });
+      const client = service.upsertClient({
+        name: 'Betty Mills',
+        roles: ['COO'],
+      });
       const project = service.upsertProject({
         clientId: client.id,
         name: 'General / COO',
@@ -732,7 +777,10 @@ describe('personal-ops service', () => {
         title: 'Support queue update',
         summary: 'Support alias received a routine customer update.',
         body: 'Routine support queue update without direct ask to Jerry.',
-        participants: ['support@bettymills.com', 'Customer <customer@example.com>'],
+        participants: [
+          'support@bettymills.com',
+          'Customer <customer@example.com>',
+        ],
         occurredAt: isoMinutesAgo(40),
         priority: 'low' as const,
         status: 'received',
@@ -797,7 +845,10 @@ describe('personal-ops service', () => {
           title: 'Vendor price sheet update',
           summary: 'Updated vendor pricing for review.',
           body: 'Please review the attached pricing changes.',
-          participants: ['merchandising@bettymills.com', 'Vendor <vendor@example.com>'],
+          participants: [
+            'merchandising@bettymills.com',
+            'Vendor <vendor@example.com>',
+          ],
           occurredAt: isoMinutesAgo(25),
           syncedAt: isoMinutesAgo(24),
           clientId: client.id,
@@ -813,10 +864,14 @@ describe('personal-ops service', () => {
         },
       });
 
-      expect(context.connectionContext?.triageGuidance).toContain('Betty Mills COO');
+      expect(context.connectionContext?.triageGuidance).toContain(
+        'Betty Mills COO',
+      );
       expect(context.connectionContext?.defaultClientName).toBe('Betty Mills');
       expect(context.clientProfiles[0]?.roles).toContain('COO');
-      expect(context.clientProfiles[0]?.communicationPreferences).toContain('pricing');
+      expect(context.clientProfiles[0]?.communicationPreferences).toContain(
+        'pricing',
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes('NODE_MODULE_VERSION')) {
@@ -847,7 +902,8 @@ describe('personal-ops service', () => {
       );
 
       const connection = listConnectedAccounts().find(
-        (entry) => entry.provider === 'microsoft' && entry.accountId === 'betty-account',
+        (entry) =>
+          entry.provider === 'microsoft' && entry.accountId === 'betty-account',
       );
       expect(connection?.settings.triageGuidance).toContain('Betty Mills COO');
     } catch (error) {
@@ -957,10 +1013,14 @@ describe('personal-ops service', () => {
       expect(inbox.map((item) => item.kind)).toContain('slack_message');
 
       const today = service.getTodayView();
-      expect(today.inbox.some((item) => item.kind === 'slack_message')).toBe(true);
+      expect(today.inbox.some((item) => item.kind === 'slack_message')).toBe(
+        true,
+      );
 
       const workItems = listWorkItems({ limit: 20 });
-      expect(workItems.some((item) => item.sourceKind === 'slack_message')).toBe(true);
+      expect(
+        workItems.some((item) => item.sourceKind === 'slack_message'),
+      ).toBe(true);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes('NODE_MODULE_VERSION')) {
@@ -1201,7 +1261,8 @@ describe('personal-ops service', () => {
       });
 
       service['listConnections'] = service.listConnections.bind(service);
-      (service as any).syncProvider = PersonalOpsService.prototype.syncProvider.bind(service);
+      (service as any).syncProvider =
+        PersonalOpsService.prototype.syncProvider.bind(service);
 
       const baseSource = {
         connectionKey: 'microsoft:acct-betty',
@@ -1246,7 +1307,13 @@ describe('personal-ops service', () => {
       const projects = service.getProjects();
       const repositories = service.getRepositories();
       const candidate: any = { ...baseSource };
-      (service as any).applyRuleBasedAttribution(candidate, clients, projects, repositories, {});
+      (service as any).applyRuleBasedAttribution(
+        candidate,
+        clients,
+        projects,
+        repositories,
+        {},
+      );
 
       upsertSourceRecord({
         ...baseSource,
@@ -1345,13 +1412,21 @@ describe('personal-ops service', () => {
       fs.mkdirSync(repoDir, { recursive: true });
       execFileSync('git', ['init', '--initial-branch=main'], { cwd: repoDir });
       execFileSync('git', ['config', 'user.name', 'Jerry'], { cwd: repoDir });
-      execFileSync('git', ['config', 'user.email', 'jerry@example.com'], { cwd: repoDir });
-      execFileSync('git', ['remote', 'add', 'origin', 'git@github.com:jetracks/sample-repo.git'], {
+      execFileSync('git', ['config', 'user.email', 'jerry@example.com'], {
         cwd: repoDir,
       });
+      execFileSync(
+        'git',
+        ['remote', 'add', 'origin', 'git@github.com:jetracks/sample-repo.git'],
+        {
+          cwd: repoDir,
+        },
+      );
       fs.writeFileSync(path.join(repoDir, 'README.md'), '# sample repo\n');
       execFileSync('git', ['add', 'README.md'], { cwd: repoDir });
-      execFileSync('git', ['commit', '-m', 'Initial sample repo commit'], { cwd: repoDir });
+      execFileSync('git', ['commit', '-m', 'Initial sample repo commit'], {
+        cwd: repoDir,
+      });
 
       const repository = service.upsertRepository({
         localPath: repoDir,
@@ -1363,7 +1438,9 @@ describe('personal-ops service', () => {
       expect(repository.clientId).toBe(client.id);
       expect(repository.projectId).toBe(project.id);
       expect(repository.defaultBranch).toBe('main');
-      expect(repository.remoteUrl).toBe('git@github.com:jetracks/sample-repo.git');
+      expect(repository.remoteUrl).toBe(
+        'git@github.com:jetracks/sample-repo.git',
+      );
       expect(repository.lastCommitAt).toBeTruthy();
 
       const repositories = listRepositories({ projectId: project.id });
@@ -1373,10 +1450,14 @@ describe('personal-ops service', () => {
       const history = service.getHistoryView({
         since: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
       });
-      expect(history.some((activity) => activity.type === 'git_commit')).toBe(true);
-      expect(history.some((activity) => activity.summary.includes('Initial sample repo commit'))).toBe(
+      expect(history.some((activity) => activity.type === 'git_commit')).toBe(
         true,
       );
+      expect(
+        history.some((activity) =>
+          activity.summary.includes('Initial sample repo commit'),
+        ),
+      ).toBe(true);
 
       const wrap = await service.generateReport('wrap');
       expect(wrap.groupedOutput).toContain('Estimated commit time');
@@ -1398,15 +1479,23 @@ describe('personal-ops service', () => {
       const downloadsRepo = path.join(homeDir, 'Downloads', 'wabash-repo');
       fs.mkdirSync(projectRepo, { recursive: true });
       fs.mkdirSync(downloadsRepo, { recursive: true });
-      execFileSync('git', ['init', '--initial-branch=main'], { cwd: projectRepo });
-      execFileSync('git', ['init', '--initial-branch=main'], { cwd: downloadsRepo });
+      execFileSync('git', ['init', '--initial-branch=main'], {
+        cwd: projectRepo,
+      });
+      execFileSync('git', ['init', '--initial-branch=main'], {
+        cwd: downloadsRepo,
+      });
 
-      const repositories = service.discoverRepositories({ rootPath: homeDir, maxDepth: 4 });
+      const repositories = service.discoverRepositories({
+        rootPath: homeDir,
+        maxDepth: 4,
+      });
 
       expect(repositories).toHaveLength(2);
-      expect(
-        repositories.map((repository) => repository.name).sort(),
-      ).toEqual(['alpha-repo', 'wabash-repo']);
+      expect(repositories.map((repository) => repository.name).sort()).toEqual([
+        'alpha-repo',
+        'wabash-repo',
+      ]);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes('NODE_MODULE_VERSION')) {
@@ -1420,7 +1509,10 @@ describe('personal-ops service', () => {
   it('downgrades routine automated notifications so they do not create action work', () => {
     try {
       const service = new PersonalOpsService();
-      const client = service.upsertClient({ name: 'Betty Mills', roles: ['COO'] });
+      const client = service.upsertClient({
+        name: 'Betty Mills',
+        roles: ['COO'],
+      });
       const project = service.upsertProject({
         clientId: client.id,
         name: 'General / COO',
@@ -1478,9 +1570,13 @@ describe('personal-ops service', () => {
         externalId: 'gmail-tips-1',
         externalParentId: 'thread-gmail-tips-1',
         title: 'Tips for using your new inbox',
-        summary: 'Welcome to your inbox. Find emails fast and keep things tidy.',
+        summary:
+          'Welcome to your inbox. Find emails fast and keep things tidy.',
         body: 'Welcome to your inbox. You never need to worry about losing email again.',
-        participants: ['Gmail Team <mail-noreply@google.com>', 'Jerry Sandoval <jerry@dynecom.com>'],
+        participants: [
+          'Gmail Team <mail-noreply@google.com>',
+          'Jerry Sandoval <jerry@dynecom.com>',
+        ],
         occurredAt: isoMinutesAgo(18),
         priority: 'medium' as const,
         status: 'received',
@@ -1501,9 +1597,13 @@ describe('personal-ops service', () => {
         externalId: 'pricing-keep',
         externalParentId: 'thread-pricing-keep',
         title: 'Need your approval on vendor pricing update',
-        summary: 'Jerry, can you confirm we should accept the vendor pricing update today?',
+        summary:
+          'Jerry, can you confirm we should accept the vendor pricing update today?',
         body: 'Jerry, can you confirm we should accept the vendor pricing update today?',
-        participants: ['Vendor Pricing <pricing@vendor.com>', 'jerry@bettymills.com'],
+        participants: [
+          'Vendor Pricing <pricing@vendor.com>',
+          'jerry@bettymills.com',
+        ],
         occurredAt: isoMinutesAgo(20),
         priority: 'high' as const,
         status: 'received',
@@ -1546,12 +1646,24 @@ describe('personal-ops service', () => {
       const inbox = service.getInboxView();
       expect(inbox.map((entry) => entry.externalId)).toContain('pricing-keep');
       expect(inbox.map((entry) => entry.externalId)).not.toContain('share-1');
-      expect(inbox.map((entry) => entry.externalId)).not.toContain('gmail-tips-1');
+      expect(inbox.map((entry) => entry.externalId)).not.toContain(
+        'gmail-tips-1',
+      );
 
       const workItems = listWorkItems({ limit: 20 });
-      expect(workItems.some((item) => item.sourceRecordKey?.includes('share-1'))).toBe(false);
-      expect(workItems.some((item) => item.sourceRecordKey?.includes('gmail-tips-1'))).toBe(false);
-      expect(workItems.some((item) => item.sourceRecordKey?.includes('pricing-keep'))).toBe(true);
+      expect(
+        workItems.some((item) => item.sourceRecordKey?.includes('share-1')),
+      ).toBe(false);
+      expect(
+        workItems.some((item) =>
+          item.sourceRecordKey?.includes('gmail-tips-1'),
+        ),
+      ).toBe(false);
+      expect(
+        workItems.some((item) =>
+          item.sourceRecordKey?.includes('pricing-keep'),
+        ),
+      ).toBe(true);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes('NODE_MODULE_VERSION')) {
@@ -1565,7 +1677,10 @@ describe('personal-ops service', () => {
   it('treats shared group-assignment wrapper emails as awareness unless operationally sensitive', () => {
     try {
       const service = new PersonalOpsService();
-      const client = service.upsertClient({ name: 'Betty Mills', roles: ['COO'] });
+      const client = service.upsertClient({
+        name: 'Betty Mills',
+        roles: ['COO'],
+      });
       const project = service.upsertProject({
         clientId: client.id,
         name: 'General / COO',
@@ -1578,11 +1693,11 @@ describe('personal-ops service', () => {
         kind: 'email' as const,
         externalId: 'group-wrapper-1',
         externalParentId: 'thread-group-wrapper-1',
-        title: 'Assigned to Group - The Betty Mills Company: last check for featured slots',
+        title:
+          'Assigned to Group - The Betty Mills Company: last check for featured slots',
         summary:
           'Hi A new ticket has been assigned to your group "Sales". Please follow the link below to view the ticket.',
-        body:
-          'Hi A new ticket has been assigned to your group "Sales". Please follow the link below to view the ticket. The Betty Mills Company: last check for featured slots.',
+        body: 'Hi A new ticket has been assigned to your group "Sales". Please follow the link below to view the ticket. The Betty Mills Company: last check for featured slots.',
         participants: ['support@bettymills.com', 'latoya@bettymills.com'],
         occurredAt: isoMinutesAgo(25),
         priority: 'medium' as const,
@@ -1621,7 +1736,9 @@ describe('personal-ops service', () => {
       (service as any).materializeDerivedRecords(source);
 
       const inbox = service.getInboxView({ includeNoise: true });
-      const surfaced = inbox.find((entry) => entry.externalId === 'group-wrapper-1');
+      const surfaced = inbox.find(
+        (entry) => entry.externalId === 'group-wrapper-1',
+      );
       expect(surfaced).toBeTruthy();
       expect(surfaced?.attention?.actionRequired).toBe(false);
       expect(surfaced?.attention?.awarenessOnly).toBe(false);
@@ -1629,10 +1746,16 @@ describe('personal-ops service', () => {
       expect(surfaced?.attention?.reportWorthy).toBe(false);
 
       const workItems = listWorkItems({ limit: 20 });
-      expect(workItems.some((item) => item.sourceRecordKey?.includes('group-wrapper-1'))).toBe(false);
+      expect(
+        workItems.some((item) =>
+          item.sourceRecordKey?.includes('group-wrapper-1'),
+        ),
+      ).toBe(false);
 
       const today = service.getTodayView();
-      expect(today.awareness.some((entry) => entry.externalId === 'group-wrapper-1')).toBe(false);
+      expect(
+        today.awareness.some((entry) => entry.externalId === 'group-wrapper-1'),
+      ).toBe(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes('NODE_MODULE_VERSION')) {
@@ -1646,7 +1769,10 @@ describe('personal-ops service', () => {
   it('does not raise shared alias email without Jerry in recipients as an important item', () => {
     try {
       const service = new PersonalOpsService();
-      const client = service.upsertClient({ name: 'Betty Mills', roles: ['COO'] });
+      const client = service.upsertClient({
+        name: 'Betty Mills',
+        roles: ['COO'],
+      });
       const project = service.upsertProject({
         clientId: client.id,
         name: 'General / COO',
@@ -1662,7 +1788,10 @@ describe('personal-ops service', () => {
         title: 'Customer question about order status',
         summary: 'Support mailbox received a routine order status follow-up.',
         body: 'Customer is asking for a status update on an order. No direct ask to Jerry.',
-        participants: ['support@bettymills.com', 'Customer <customer@example.com>'],
+        participants: [
+          'support@bettymills.com',
+          'Customer <customer@example.com>',
+        ],
         occurredAt: isoMinutesAgo(18),
         priority: 'high' as const,
         status: 'received',
@@ -1699,7 +1828,9 @@ describe('personal-ops service', () => {
       (service as any).materializeDerivedRecords(source);
 
       const inbox = service.getInboxView({ includeNoise: true });
-      const surfaced = inbox.find((entry) => entry.externalId === 'support-alias-1');
+      const surfaced = inbox.find(
+        (entry) => entry.externalId === 'support-alias-1',
+      );
       expect(surfaced).toBeTruthy();
       expect(surfaced?.attention?.directness).toBe('shared');
       expect(surfaced?.attention?.actionRequired).toBe(false);
@@ -1709,13 +1840,19 @@ describe('personal-ops service', () => {
       );
 
       const today = service.getTodayView();
-      expect(today.inbox.some((entry) => entry.externalId === 'support-alias-1')).toBe(false);
-      expect(today.awareness.some((entry) => entry.externalId === 'support-alias-1')).toBe(false);
+      expect(
+        today.inbox.some((entry) => entry.externalId === 'support-alias-1'),
+      ).toBe(false);
+      expect(
+        today.awareness.some((entry) => entry.externalId === 'support-alias-1'),
+      ).toBe(false);
 
       const workItems = listWorkItems({ limit: 20 });
-      expect(workItems.some((item) => item.sourceRecordKey?.includes('support-alias-1'))).toBe(
-        false,
-      );
+      expect(
+        workItems.some((item) =>
+          item.sourceRecordKey?.includes('support-alias-1'),
+        ),
+      ).toBe(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes('NODE_MODULE_VERSION')) {
@@ -1729,7 +1866,10 @@ describe('personal-ops service', () => {
   it('does not raise Freshdesk support traffic when Jerry is only the sender identity', () => {
     try {
       const service = new PersonalOpsService();
-      const client = service.upsertClient({ name: 'Betty Mills', roles: ['COO'] });
+      const client = service.upsertClient({
+        name: 'Betty Mills',
+        roles: ['COO'],
+      });
       const project = service.upsertProject({
         clientId: client.id,
         name: 'General / COO',
@@ -1743,7 +1883,8 @@ describe('personal-ops service', () => {
         externalId: 'freshdesk-support-1',
         externalParentId: 'thread-freshdesk-support-1',
         title: 'Re: Ticket #48123 order status follow-up',
-        summary: 'Freshdesk sent a customer support reply using your mailbox identity.',
+        summary:
+          'Freshdesk sent a customer support reply using your mailbox identity.',
         body: 'Freshdesk sent this customer support ticket reply. No direct ask to Jerry.',
         participants: [
           'jerry@bettymills.com',
@@ -1769,7 +1910,10 @@ describe('personal-ops service', () => {
         },
         metadata: {
           fromAddress: 'jerry@bettymills.com',
-          toRecipientAddresses: ['support@bettymills.com', 'customer@example.com'],
+          toRecipientAddresses: [
+            'support@bettymills.com',
+            'customer@example.com',
+          ],
           attention: {
             awarenessOnly: false,
             actionRequired: true,
@@ -1788,7 +1932,9 @@ describe('personal-ops service', () => {
       (service as any).materializeDerivedRecords(source);
 
       const inbox = service.getInboxView({ includeNoise: true });
-      const surfaced = inbox.find((entry) => entry.externalId === 'freshdesk-support-1');
+      const surfaced = inbox.find(
+        (entry) => entry.externalId === 'freshdesk-support-1',
+      );
       expect(surfaced).toBeTruthy();
       expect(surfaced?.attention?.directness).toBe('shared');
       expect(surfaced?.attention?.actionRequired).toBe(false);
@@ -1798,15 +1944,21 @@ describe('personal-ops service', () => {
       );
 
       const today = service.getTodayView();
-      expect(today.inbox.some((entry) => entry.externalId === 'freshdesk-support-1')).toBe(false);
-      expect(today.awareness.some((entry) => entry.externalId === 'freshdesk-support-1')).toBe(
-        false,
-      );
+      expect(
+        today.inbox.some((entry) => entry.externalId === 'freshdesk-support-1'),
+      ).toBe(false);
+      expect(
+        today.awareness.some(
+          (entry) => entry.externalId === 'freshdesk-support-1',
+        ),
+      ).toBe(false);
 
       const workItems = listWorkItems({ limit: 20 });
-      expect(workItems.some((item) => item.sourceRecordKey?.includes('freshdesk-support-1'))).toBe(
-        false,
-      );
+      expect(
+        workItems.some((item) =>
+          item.sourceRecordKey?.includes('freshdesk-support-1'),
+        ),
+      ).toBe(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes('NODE_MODULE_VERSION')) {
@@ -1820,7 +1972,10 @@ describe('personal-ops service', () => {
   it('does not raise internal distribution-list noise when Jerry is not an explicit recipient', () => {
     try {
       const service = new PersonalOpsService();
-      const client = service.upsertClient({ name: 'Betty Mills', roles: ['COO'] });
+      const client = service.upsertClient({
+        name: 'Betty Mills',
+        roles: ['COO'],
+      });
       const project = service.upsertProject({
         clientId: client.id,
         name: 'General / COO',
@@ -1876,24 +2031,34 @@ describe('personal-ops service', () => {
       (service as any).materializeDerivedRecords(source);
 
       const inbox = service.getInboxView({ includeNoise: true });
-      const surfaced = inbox.find((entry) => entry.externalId === 'flashsales-report-1');
+      const surfaced = inbox.find(
+        (entry) => entry.externalId === 'flashsales-report-1',
+      );
       expect(surfaced).toBeTruthy();
       expect(surfaced?.attention?.directness).toBe('shared');
       expect(surfaced?.attention?.actionRequired).toBe(false);
       expect(surfaced?.attention?.operationalRisk).toBe(false);
       expect(surfaced?.attention?.reportWorthy).toBe(false);
-      expect(surfaced?.attention?.importanceReason).toContain('without Jerry as a recipient');
+      expect(surfaced?.attention?.importanceReason).toContain(
+        'without Jerry as a recipient',
+      );
 
       const today = service.getTodayView();
-      expect(today.inbox.some((entry) => entry.externalId === 'flashsales-report-1')).toBe(false);
-      expect(today.awareness.some((entry) => entry.externalId === 'flashsales-report-1')).toBe(
-        false,
-      );
+      expect(
+        today.inbox.some((entry) => entry.externalId === 'flashsales-report-1'),
+      ).toBe(false);
+      expect(
+        today.awareness.some(
+          (entry) => entry.externalId === 'flashsales-report-1',
+        ),
+      ).toBe(false);
 
       const workItems = listWorkItems({ limit: 20 });
-      expect(workItems.some((item) => item.sourceRecordKey?.includes('flashsales-report-1'))).toBe(
-        false,
-      );
+      expect(
+        workItems.some((item) =>
+          item.sourceRecordKey?.includes('flashsales-report-1'),
+        ),
+      ).toBe(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes('NODE_MODULE_VERSION')) {
@@ -1907,7 +2072,10 @@ describe('personal-ops service', () => {
   it('keeps shared pricing updates as awareness when they are executive-relevant exceptions', () => {
     try {
       const service = new PersonalOpsService();
-      const client = service.upsertClient({ name: 'Betty Mills', roles: ['COO'] });
+      const client = service.upsertClient({
+        name: 'Betty Mills',
+        roles: ['COO'],
+      });
       const project = service.upsertProject({
         clientId: client.id,
         name: 'General / COO',
@@ -1923,7 +2091,10 @@ describe('personal-ops service', () => {
         title: 'Monthly Price File Current Information',
         summary: 'Vendor pricing update for the merchandising team.',
         body: 'Vendor pricing update attached. Price file and min max values were updated for review.',
-        participants: ['Vendor Pricing <pricing@vendor.com>', 'merchandising@bettymills.com'],
+        participants: [
+          'Vendor Pricing <pricing@vendor.com>',
+          'merchandising@bettymills.com',
+        ],
         occurredAt: isoMinutesAgo(12),
         priority: 'medium' as const,
         status: 'received',
@@ -1963,7 +2134,9 @@ describe('personal-ops service', () => {
       (service as any).materializeDerivedRecords(source);
 
       const inbox = service.getInboxView({ includeNoise: true });
-      const surfaced = inbox.find((entry) => entry.externalId === 'pricing-update-1');
+      const surfaced = inbox.find(
+        (entry) => entry.externalId === 'pricing-update-1',
+      );
       expect(surfaced).toBeTruthy();
       expect(surfaced?.attention?.directness).toBe('shared');
       expect(surfaced?.attention?.actionRequired).toBe(false);
@@ -1974,7 +2147,11 @@ describe('personal-ops service', () => {
       );
 
       const today = service.getTodayView();
-      expect(today.awareness.some((entry) => entry.externalId === 'pricing-update-1')).toBe(true);
+      expect(
+        today.awareness.some(
+          (entry) => entry.externalId === 'pricing-update-1',
+        ),
+      ).toBe(true);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes('NODE_MODULE_VERSION')) {
@@ -1988,7 +2165,10 @@ describe('personal-ops service', () => {
   it('hides stale derived email work when current attention logic demotes the source', () => {
     try {
       const service = new PersonalOpsService();
-      const client = service.upsertClient({ name: 'Betty Mills', roles: ['COO'] });
+      const client = service.upsertClient({
+        name: 'Betty Mills',
+        roles: ['COO'],
+      });
       const project = service.upsertProject({
         clientId: client.id,
         name: 'General / COO',
@@ -2004,7 +2184,10 @@ describe('personal-ops service', () => {
         title: 'Action required: your items were rejected',
         summary: 'A Facebook item was rejected.',
         body: 'These items are not live. Shared merchandising notification without a direct ask to Jerry.',
-        participants: ['noreply@business.facebook.com', 'merchandising@bettymills.com'],
+        participants: [
+          'noreply@business.facebook.com',
+          'merchandising@bettymills.com',
+        ],
         occurredAt: isoMinutesAgo(90),
         priority: 'medium' as const,
         status: 'received',
@@ -2046,7 +2229,8 @@ describe('personal-ops service', () => {
         title: 'Review Facebook rejection and determine remediation',
         sourceKind: 'email',
         sourceProvider: 'microsoft',
-        sourceRecordKey: 'microsoft:jerry@bettymills.com:email:stale-facebook-shared-1',
+        sourceRecordKey:
+          'microsoft:jerry@bettymills.com:email:stale-facebook-shared-1',
         clientId: client.id,
         projectId: project.id,
         dueDate: null,
@@ -2060,9 +2244,21 @@ describe('personal-ops service', () => {
       });
 
       const today = service.getTodayView();
-      expect(today.priorities.some((item) => item.title.includes('Facebook rejection'))).toBe(false);
-      expect(today.blockers.some((item) => item.title.includes('Facebook rejection'))).toBe(false);
-      expect(today.openLoops.some((item) => item.title.includes('Facebook rejection'))).toBe(false);
+      expect(
+        today.priorities.some((item) =>
+          item.title.includes('Facebook rejection'),
+        ),
+      ).toBe(false);
+      expect(
+        today.blockers.some((item) =>
+          item.title.includes('Facebook rejection'),
+        ),
+      ).toBe(false);
+      expect(
+        today.openLoops.some((item) =>
+          item.title.includes('Facebook rejection'),
+        ),
+      ).toBe(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes('NODE_MODULE_VERSION')) {
@@ -2076,7 +2272,10 @@ describe('personal-ops service', () => {
   it('derives mentioned directness from explicit cc recipients', () => {
     try {
       const service = new PersonalOpsService();
-      const client = service.upsertClient({ name: 'Betty Mills', roles: ['COO'] });
+      const client = service.upsertClient({
+        name: 'Betty Mills',
+        roles: ['COO'],
+      });
       const project = service.upsertProject({
         clientId: client.id,
         name: 'General / COO',
@@ -2092,7 +2291,11 @@ describe('personal-ops service', () => {
         title: 'Please review vendor follow-up',
         summary: 'Jerry is copied for review.',
         body: 'Please review this vendor follow-up and let me know.',
-        participants: ['Vendor <vendor@example.com>', 'ops@bettymills.com', 'jerry@bettymills.com'],
+        participants: [
+          'Vendor <vendor@example.com>',
+          'ops@bettymills.com',
+          'jerry@bettymills.com',
+        ],
         occurredAt: isoMinutesAgo(7),
         priority: 'medium' as const,
         status: 'received',
@@ -2109,7 +2312,9 @@ describe('personal-ops service', () => {
 
       upsertSourceRecord(source);
       const inbox = service.getInboxView({ includeNoise: true });
-      const surfaced = inbox.find((entry) => entry.externalId === 'cc-mention-1');
+      const surfaced = inbox.find(
+        (entry) => entry.externalId === 'cc-mention-1',
+      );
       expect(surfaced?.attention?.directness).toBe('mentioned');
       expect(surfaced?.attention?.actionRequired).toBe(true);
     } catch (error) {
@@ -2125,7 +2330,10 @@ describe('personal-ops service', () => {
   it('ignores similar email messages by sender and subject pattern', () => {
     try {
       const service = new PersonalOpsService();
-      const client = service.upsertClient({ name: 'Betty Mills', roles: ['COO'] });
+      const client = service.upsertClient({
+        name: 'Betty Mills',
+        roles: ['COO'],
+      });
       const project = service.upsertProject({
         clientId: client.id,
         name: 'General / COO',
@@ -2241,8 +2449,12 @@ describe('personal-ops service', () => {
       expect(refreshedSecond?.metadata?.likelyNoise).toBe(true);
 
       const inbox = service.getInboxView();
-      expect(inbox.some((entry) => entry.externalId === 'facebook-rejected-1')).toBe(false);
-      expect(inbox.some((entry) => entry.externalId === 'facebook-rejected-2')).toBe(false);
+      expect(
+        inbox.some((entry) => entry.externalId === 'facebook-rejected-1'),
+      ).toBe(false);
+      expect(
+        inbox.some((entry) => entry.externalId === 'facebook-rejected-2'),
+      ).toBe(false);
 
       const workItems = listWorkItems({ limit: 20 }).filter((item) =>
         item.sourceRecordKey?.includes('facebook-rejected'),
@@ -2314,18 +2526,35 @@ describe('personal-ops service', () => {
         },
       };
 
-      source.linkedContactIds = (service as any).ensureContactsFromSource(source);
+      source.linkedContactIds = (service as any).ensureContactsFromSource(
+        source,
+      );
       upsertSourceRecord(source);
       (service as any).materializeDerivedRecords(source);
 
       const contacts = service.getContacts();
-      expect(contacts.contacts.some((contact) => contact.name.toLowerCase().includes('vendor'))).toBe(true);
+      expect(
+        contacts.contacts.some((contact) =>
+          contact.name.toLowerCase().includes('vendor'),
+        ),
+      ).toBe(true);
 
       const openLoops = service.getOpenLoops();
-      expect(openLoops.some((loop) => loop.kind === 'review' && loop.title === 'MAP violation notice')).toBe(true);
+      expect(
+        openLoops.some(
+          (loop) =>
+            loop.kind === 'review' && loop.title === 'MAP violation notice',
+        ),
+      ).toBe(true);
 
       const review = service.getReviewQueue();
-      expect(review.some((item) => item.kind === 'source_record' && item.title === 'MAP violation notice')).toBe(true);
+      expect(
+        review.some(
+          (item) =>
+            item.kind === 'source_record' &&
+            item.title === 'MAP violation notice',
+        ),
+      ).toBe(true);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes('NODE_MODULE_VERSION')) {
@@ -2352,9 +2581,13 @@ describe('personal-ops service', () => {
         externalId: 'pricing-1',
         externalParentId: 'thread-pricing-1',
         title: 'Vendor pricing update needs review',
-        summary: 'Can you confirm we should accept the new pricing sheet today?',
+        summary:
+          'Can you confirm we should accept the new pricing sheet today?',
         body: 'Jerry, can you confirm whether we should accept the new vendor pricing update today?',
-        participants: ['Vendor Pricing <pricing@vendor.com>', 'jerry@bettymills.com'],
+        participants: [
+          'Vendor Pricing <pricing@vendor.com>',
+          'jerry@bettymills.com',
+        ],
         occurredAt: isoMinutesAgo(15),
         priority: 'high' as const,
         status: 'received',
@@ -2392,7 +2625,9 @@ describe('personal-ops service', () => {
         },
       };
 
-      source.linkedContactIds = (service as any).ensureContactsFromSource(source);
+      source.linkedContactIds = (service as any).ensureContactsFromSource(
+        source,
+      );
       upsertSourceRecord(source);
       (service as any).materializeDerivedRecords(source);
 
@@ -2405,12 +2640,34 @@ describe('personal-ops service', () => {
       });
 
       const queue = service.getApprovalQueue();
-      expect(queue.some((item) => item.kind === 'reply_draft' && item.sourceRecordKey?.includes('pricing-1'))).toBe(true);
-      expect(queue.some((item) => item.kind === 'follow_up_task' && item.sourceRecordKey?.includes('pricing-1'))).toBe(true);
+      expect(
+        queue.some(
+          (item) =>
+            item.kind === 'reply_draft' &&
+            item.sourceRecordKey?.includes('pricing-1'),
+        ),
+      ).toBe(true);
+      expect(
+        queue.some(
+          (item) =>
+            item.kind === 'follow_up_task' &&
+            item.sourceRecordKey?.includes('pricing-1'),
+        ),
+      ).toBe(true);
 
       const memory = service.getMemoryFacts();
-      expect(memory.some((fact) => fact.kind === 'contact_client' && fact.clientId === client.id)).toBe(true);
-      expect(memory.some((fact) => fact.kind === 'contact_project' && fact.projectId === project.id)).toBe(true);
+      expect(
+        memory.some(
+          (fact) =>
+            fact.kind === 'contact_client' && fact.clientId === client.id,
+        ),
+      ).toBe(true);
+      expect(
+        memory.some(
+          (fact) =>
+            fact.kind === 'contact_project' && fact.projectId === project.id,
+        ),
+      ).toBe(true);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes('NODE_MODULE_VERSION')) {
@@ -2437,7 +2694,8 @@ describe('personal-ops service', () => {
         kind: 'email' as const,
         externalId: 'clear-contact-defaults-1',
         title: 'Figma account notice',
-        summary: 'Shared service email that should not keep a hardwired project.',
+        summary:
+          'Shared service email that should not keep a hardwired project.',
         body: 'This sender appears across multiple contexts.',
         participants: ['Figma <announcements@figma.com>'],
         occurredAt: isoMinutesAgo(10),
@@ -2448,7 +2706,9 @@ describe('personal-ops service', () => {
         projectId: project.id,
       };
 
-      source.linkedContactIds = (service as any).ensureContactsFromSource(source);
+      source.linkedContactIds = (service as any).ensureContactsFromSource(
+        source,
+      );
       const contactId = source.linkedContactIds[0];
 
       service.linkContact({

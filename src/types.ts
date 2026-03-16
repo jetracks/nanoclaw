@@ -98,7 +98,10 @@ export type PersonalOpsSourceKind =
   | 'manual_note'
   | 'manual_task'
   | 'report';
-export type PersonalOpsActivityProvider = PersonalOpsProvider | 'manual' | 'git';
+export type PersonalOpsActivityProvider =
+  | PersonalOpsProvider
+  | 'manual'
+  | 'git';
 export type PersonalOpsReportType =
   | 'morning'
   | 'standup'
@@ -114,7 +117,11 @@ export type PersonalOpsItemStatus =
   | 'on_hold'
   | 'ignored';
 export type PersonalOpsPriority = 'low' | 'medium' | 'high' | 'urgent';
-export type PersonalOpsContactImportance = 'low' | 'normal' | 'high' | 'critical';
+export type PersonalOpsContactImportance =
+  | 'low'
+  | 'normal'
+  | 'high'
+  | 'critical';
 export type PersonalOpsContactIdentityType =
   | 'email'
   | 'slack'
@@ -548,7 +555,12 @@ export interface ReportSnapshot {
 
 export interface Correction {
   id: string;
-  targetType: 'source_record' | 'work_item' | 'activity' | 'report' | 'preference';
+  targetType:
+    | 'source_record'
+    | 'work_item'
+    | 'activity'
+    | 'report'
+    | 'preference';
   targetId: string;
   field: string;
   value: string;

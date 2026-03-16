@@ -38,8 +38,9 @@ export const LOCAL_CHANNEL_PORT = parseInt(
   10,
 );
 export const OPERATOR_UI_ENABLED =
-  (process.env.OPERATOR_UI_ENABLED || envConfig.OPERATOR_UI_ENABLED || 'true') ===
-  'true';
+  (process.env.OPERATOR_UI_ENABLED ||
+    envConfig.OPERATOR_UI_ENABLED ||
+    'true') === 'true';
 export const OPERATOR_UI_HOST = '127.0.0.1';
 export const OPERATOR_UI_PORT = parseInt(
   process.env.OPERATOR_UI_PORT || envConfig.OPERATOR_UI_PORT || '8788',
@@ -84,7 +85,10 @@ export const PERSONAL_OPS_STORE_DIR =
         'personal-ops',
       )
     : path.join(HOME_DIR, '.config', 'nanoclaw', 'personal-ops'));
-export const PERSONAL_OPS_PUBLIC_DIR = path.join(PERSONAL_OPS_STORE_DIR, 'public');
+export const PERSONAL_OPS_PUBLIC_DIR = path.join(
+  PERSONAL_OPS_STORE_DIR,
+  'public',
+);
 export const PERSONAL_OPS_PUSH_MAIN_CHAT =
   (process.env.PERSONAL_OPS_PUSH_MAIN_CHAT ||
     envConfig.PERSONAL_OPS_PUSH_MAIN_CHAT ||

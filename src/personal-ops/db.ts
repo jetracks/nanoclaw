@@ -122,14 +122,18 @@ export function getConnectionKey(
   return normalized ? `${provider}:${normalized}` : `${provider}:default`;
 }
 
-function tableColumns(database: Database.Database, tableName: string): Array<{
+function tableColumns(
+  database: Database.Database,
+  tableName: string,
+): Array<{
   name: string;
   pk: number;
 }> {
   try {
-    return database
-      .prepare(`PRAGMA table_info(${tableName})`)
-      .all() as Array<{ name: string; pk: number }>;
+    return database.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{
+      name: string;
+      pk: number;
+    }>;
   } catch {
     return [];
   }
@@ -137,9 +141,7 @@ function tableColumns(database: Database.Database, tableName: string): Array<{
 
 function tableExists(database: Database.Database, tableName: string): boolean {
   const row = database
-    .prepare(
-      `SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`,
-    )
+    .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`)
     .get(tableName);
   return Boolean(row);
 }
@@ -270,7 +272,8 @@ function migrateConnectedAccounts(database: Database.Database): void {
   `);
 
   for (const row of rows) {
-    const accountId = normalizeAccountId(row.account_id) || `${row.provider}:legacy`;
+    const accountId =
+      normalizeAccountId(row.account_id) || `${row.provider}:legacy`;
     insert.run({
       ...row,
       connection_key: getConnectionKey(row.provider, accountId),
@@ -291,7 +294,11 @@ function resolveMigratedAccount(
       `SELECT connection_key, account_id, account_label FROM connected_accounts WHERE provider = ? ORDER BY updated_at DESC LIMIT 1`,
     )
     .get(provider) as
-    | { connection_key: string; account_id: string; account_label: string | null }
+    | {
+        connection_key: string;
+        account_id: string;
+        account_label: string | null;
+      }
     | undefined;
   if (account) {
     return {
@@ -432,13 +439,19 @@ function migrateLegacySchema(database: Database.Database): void {
   migrateSourceRecords(database);
   if (
     tableExists(database, 'connected_accounts') &&
-    !tableColumns(database, 'connected_accounts').some((column) => column.name === 'settings')
+    !tableColumns(database, 'connected_accounts').some(
+      (column) => column.name === 'settings',
+    )
   ) {
-    database.exec(`ALTER TABLE connected_accounts ADD COLUMN settings TEXT NOT NULL DEFAULT '{}'`);
+    database.exec(
+      `ALTER TABLE connected_accounts ADD COLUMN settings TEXT NOT NULL DEFAULT '{}'`,
+    );
   }
   if (
     tableExists(database, 'clients') &&
-    !tableColumns(database, 'clients').some((column) => column.name === 'parent_client_id')
+    !tableColumns(database, 'clients').some(
+      (column) => column.name === 'parent_client_id',
+    )
   ) {
     database.exec(`ALTER TABLE clients ADD COLUMN parent_client_id TEXT`);
   }
@@ -446,31 +459,47 @@ function migrateLegacySchema(database: Database.Database): void {
     tableExists(database, 'clients') &&
     !tableColumns(database, 'clients').some((column) => column.name === 'roles')
   ) {
-    database.exec(`ALTER TABLE clients ADD COLUMN roles TEXT NOT NULL DEFAULT '[]'`);
+    database.exec(
+      `ALTER TABLE clients ADD COLUMN roles TEXT NOT NULL DEFAULT '[]'`,
+    );
   }
   if (
     tableExists(database, 'repositories') &&
-    !tableColumns(database, 'repositories').some((column) => column.name === 'last_commit_at')
+    !tableColumns(database, 'repositories').some(
+      (column) => column.name === 'last_commit_at',
+    )
   ) {
     database.exec(`ALTER TABLE repositories ADD COLUMN last_commit_at TEXT`);
   }
   if (
     tableExists(database, 'work_items') &&
-    !tableColumns(database, 'work_items').some((column) => column.name === 'needs_review')
+    !tableColumns(database, 'work_items').some(
+      (column) => column.name === 'needs_review',
+    )
   ) {
-    database.exec(`ALTER TABLE work_items ADD COLUMN needs_review INTEGER NOT NULL DEFAULT 0`);
+    database.exec(
+      `ALTER TABLE work_items ADD COLUMN needs_review INTEGER NOT NULL DEFAULT 0`,
+    );
   }
   if (
     tableExists(database, 'work_items') &&
-    !tableColumns(database, 'work_items').some((column) => column.name === 'linked_contact_ids')
+    !tableColumns(database, 'work_items').some(
+      (column) => column.name === 'linked_contact_ids',
+    )
   ) {
-    database.exec(`ALTER TABLE work_items ADD COLUMN linked_contact_ids TEXT NOT NULL DEFAULT '[]'`);
+    database.exec(
+      `ALTER TABLE work_items ADD COLUMN linked_contact_ids TEXT NOT NULL DEFAULT '[]'`,
+    );
   }
   if (
     tableExists(database, 'work_items') &&
-    !tableColumns(database, 'work_items').some((column) => column.name === 'open_loop_state')
+    !tableColumns(database, 'work_items').some(
+      (column) => column.name === 'open_loop_state',
+    )
   ) {
-    database.exec(`ALTER TABLE work_items ADD COLUMN open_loop_state TEXT NOT NULL DEFAULT 'action'`);
+    database.exec(
+      `ALTER TABLE work_items ADD COLUMN open_loop_state TEXT NOT NULL DEFAULT 'action'`,
+    );
   }
 }
 
@@ -809,8 +838,10 @@ function mapSourceRecord(row: any): SourceRecord {
       ? (metadata.attention as SourceRecord['attention'])
       : null;
   const linkedContactIds = Array.isArray(metadata.linkedContactIds)
-    ? (metadata.linkedContactIds as unknown[])
-        .filter((entry): entry is string => typeof entry === 'string' && Boolean(entry.trim()))
+    ? (metadata.linkedContactIds as unknown[]).filter(
+        (entry): entry is string =>
+          typeof entry === 'string' && Boolean(entry.trim()),
+      )
     : [];
   const threadState =
     metadata.threadState && typeof metadata.threadState === 'object'
@@ -992,7 +1023,8 @@ function mapAssistantQuestion(row: any): AssistantQuestion {
     dedupeKey: row.dedupe_key,
     status: row.status as PersonalOpsQuestionStatus,
     surface: row.surface as PersonalOpsQuestionSurface,
-    targetType: (row.target_type as PersonalOpsQuestionTargetType | null) ?? null,
+    targetType:
+      (row.target_type as PersonalOpsQuestionTargetType | null) ?? null,
     targetId: row.target_id ?? null,
     urgency: row.urgency as PersonalOpsQuestionUrgency,
     prompt: row.prompt,
@@ -1095,7 +1127,11 @@ function mapApprovalQueueItem(row: any): ApprovalQueueItem {
     body: row.body,
     reason: row.reason,
     confidence:
-      typeof row.confidence === 'number' ? row.confidence : row.confidence == null ? null : Number(row.confidence),
+      typeof row.confidence === 'number'
+        ? row.confidence
+        : row.confidence == null
+          ? null
+          : Number(row.confidence),
     clientId: row.client_id ?? null,
     projectId: row.project_id ?? null,
     sourceRecordKey: row.source_record_key ?? null,
@@ -1121,7 +1157,9 @@ function mapCorrection(row: any): Correction {
   };
 }
 
-export function initPersonalOpsDatabase(storeDir = PERSONAL_OPS_STORE_DIR): void {
+export function initPersonalOpsDatabase(
+  storeDir = PERSONAL_OPS_STORE_DIR,
+): void {
   fs.mkdirSync(storeDir, { recursive: true, mode: 0o700 });
   try {
     fs.chmodSync(storeDir, 0o700);
@@ -1171,7 +1209,10 @@ export function parseSourceRecordKey(key: string): {
   const provider = parts[0] as SourceRecord['provider'];
   if (provider === 'manual') {
     const [manualProvider, kind, ...external] = parts;
-    if (!SOURCE_KINDS.has(kind as PersonalOpsSourceKind) || external.length === 0) {
+    if (
+      !SOURCE_KINDS.has(kind as PersonalOpsSourceKind) ||
+      external.length === 0
+    ) {
       return null;
     }
     return {
@@ -1191,7 +1232,10 @@ export function parseSourceRecordKey(key: string): {
     };
   }
   const [scopedProvider, accountId, kind, ...external] = parts;
-  if (!SOURCE_KINDS.has(kind as PersonalOpsSourceKind) || external.length === 0) {
+  if (
+    !SOURCE_KINDS.has(kind as PersonalOpsSourceKind) ||
+    external.length === 0
+  ) {
     return null;
   }
   return {
@@ -1210,8 +1254,11 @@ export function listConnectedAccounts(): ConnectedAccount[] {
     .all()
     .map((row) => {
       const mapped = mapConnectedAccount(row as ConnectedAccountRow);
-      const { accessToken: _accessToken, refreshToken: _refreshToken, ...rest } =
-        mapped;
+      const {
+        accessToken: _accessToken,
+        refreshToken: _refreshToken,
+        ...rest
+      } = mapped;
       return rest;
     });
 }
@@ -1233,7 +1280,9 @@ export function getConnectedAccountRecord(
     .prepare(
       `SELECT * FROM connected_accounts WHERE provider = ? AND account_id = ?`,
     )
-    .get(provider, normalizeAccountId(accountId)) as ConnectedAccountRow | undefined;
+    .get(provider, normalizeAccountId(accountId)) as
+    | ConnectedAccountRow
+    | undefined;
   return row ? mapConnectedAccount(row) : undefined;
 }
 
@@ -1262,9 +1311,13 @@ export function upsertConnectedAccount(input: {
   lastSyncStatus?: ConnectedAccount['lastSyncStatus'];
   lastSyncError?: string | null;
 }): void {
-  const normalizedAccountId = normalizeAccountId(input.accountId) || `${input.provider}:default`;
+  const normalizedAccountId =
+    normalizeAccountId(input.accountId) || `${input.provider}:default`;
   const connectionKey = getConnectionKey(input.provider, normalizedAccountId);
-  const existing = getConnectedAccountRecord(input.provider, normalizedAccountId);
+  const existing = getConnectedAccountRecord(
+    input.provider,
+    normalizedAccountId,
+  );
   const now = new Date().toISOString();
   ensureDb()
     .prepare(
@@ -1304,15 +1357,15 @@ export function upsertConnectedAccount(input: {
       access_token:
         input.accessToken !== undefined
           ? input.accessToken
-          : existing?.accessToken ?? null,
+          : (existing?.accessToken ?? null),
       refresh_token:
         input.refreshToken !== undefined
           ? input.refreshToken
-          : existing?.refreshToken ?? null,
+          : (existing?.refreshToken ?? null),
       expires_at:
         input.expiresAt !== undefined
           ? input.expiresAt
-          : existing?.expiresAt ?? null,
+          : (existing?.expiresAt ?? null),
       resource_id: input.resourceId ?? existing?.resourceId ?? null,
       settings: JSON.stringify(input.settings ?? existing?.settings ?? {}),
       last_sync_at: input.lastSyncAt ?? existing?.lastSyncAt ?? null,
@@ -1321,7 +1374,7 @@ export function upsertConnectedAccount(input: {
       last_sync_error:
         input.lastSyncError !== undefined
           ? input.lastSyncError
-          : existing?.lastSyncError ?? null,
+          : (existing?.lastSyncError ?? null),
       created_at: existing?.createdAt ?? now,
       updated_at: now,
     });
@@ -1432,9 +1485,7 @@ export function addOAuthState(input: {
     );
 }
 
-export function consumeOAuthState(
-  state: string,
-): OAuthStateRecord | undefined {
+export function consumeOAuthState(state: string): OAuthStateRecord | undefined {
   const database = ensureDb();
   const row = database
     .prepare(`SELECT * FROM oauth_states WHERE state = ?`)
@@ -1609,7 +1660,9 @@ export function upsertClient(input: {
       JSON.stringify(input.roles ?? parseJson<string[]>(existing?.roles, [])),
       input.status || existing?.status || 'active',
       input.notes || existing?.notes || '',
-      input.communicationPreferences || existing?.communication_preferences || '',
+      input.communicationPreferences ||
+        existing?.communication_preferences ||
+        '',
       existing?.created_at || now,
       now,
     );
@@ -1622,7 +1675,10 @@ export function getClient(id: string): Client | undefined {
 }
 
 export function listClients(): Client[] {
-  return ensureDb().prepare(`SELECT * FROM clients ORDER BY name`).all().map(mapClient);
+  return ensureDb()
+    .prepare(`SELECT * FROM clients ORDER BY name`)
+    .all()
+    .map(mapClient);
 }
 
 export function upsertProject(input: {
@@ -1682,7 +1738,10 @@ export function listProjects(clientId?: string | null): Project[] {
       .all(clientId)
       .map(mapProject);
   }
-  return ensureDb().prepare(`SELECT * FROM projects ORDER BY name`).all().map(mapProject);
+  return ensureDb()
+    .prepare(`SELECT * FROM projects ORDER BY name`)
+    .all()
+    .map(mapProject);
 }
 
 export function upsertRepository(input: {
@@ -1734,7 +1793,9 @@ export function upsertRepository(input: {
 }
 
 export function getRepository(id: string): GitRepository | undefined {
-  const row = ensureDb().prepare(`SELECT * FROM repositories WHERE id = ?`).get(id);
+  const row = ensureDb()
+    .prepare(`SELECT * FROM repositories WHERE id = ?`)
+    .get(id);
   return row ? mapGitRepository(row) : undefined;
 }
 
@@ -1776,7 +1837,9 @@ export function upsertContact(input: {
   sourceCount?: number;
 }): Contact {
   const existing = input.id
-    ? (ensureDb().prepare(`SELECT * FROM contacts WHERE id = ?`).get(input.id) as any)
+    ? (ensureDb()
+        .prepare(`SELECT * FROM contacts WHERE id = ?`)
+        .get(input.id) as any)
     : (ensureDb()
         .prepare(`SELECT * FROM contacts WHERE LOWER(name) = LOWER(?) LIMIT 1`)
         .get(input.name) as any);
@@ -1810,10 +1873,10 @@ export function upsertContact(input: {
       input.lastSeenAt ?? existing?.last_seen_at ?? null,
       input.defaultClientId !== undefined
         ? input.defaultClientId
-        : existing?.default_client_id ?? null,
+        : (existing?.default_client_id ?? null),
       input.defaultProjectId !== undefined
         ? input.defaultProjectId
-        : existing?.default_project_id ?? null,
+        : (existing?.default_project_id ?? null),
       input.sourceCount ?? existing?.source_count ?? 0,
       existing?.created_at || now,
       now,
@@ -1893,7 +1956,9 @@ export function upsertContactIdentity(input: {
 }
 
 export function getContactIdentity(id: string): ContactIdentity | undefined {
-  const row = ensureDb().prepare(`SELECT * FROM contact_identities WHERE id = ?`).get(id);
+  const row = ensureDb()
+    .prepare(`SELECT * FROM contact_identities WHERE id = ?`)
+    .get(id);
   return row ? mapContactIdentity(row) : undefined;
 }
 
@@ -1913,7 +1978,9 @@ export function findContactIdentity(
 export function listContactIdentities(contactId?: string): ContactIdentity[] {
   if (contactId) {
     return ensureDb()
-      .prepare(`SELECT * FROM contact_identities WHERE contact_id = ? ORDER BY type, value`)
+      .prepare(
+        `SELECT * FROM contact_identities WHERE contact_id = ? ORDER BY type, value`,
+      )
       .all(contactId)
       .map(mapContactIdentity);
   }
@@ -1940,7 +2007,12 @@ export function upsertContactMappingSuggestion(input: {
        WHERE contact_id = ? AND IFNULL(client_id, '') = IFNULL(?, '') AND IFNULL(project_id, '') = IFNULL(?, '') AND basis = ?
        LIMIT 1`,
     )
-    .get(input.contactId, input.clientId ?? null, input.projectId ?? null, input.basis) as any;
+    .get(
+      input.contactId,
+      input.clientId ?? null,
+      input.projectId ?? null,
+      input.basis,
+    ) as any;
   const now = new Date().toISOString();
   const id = existing?.id || input.id || `contact_map_${randomUUID()}`;
   ensureDb()
@@ -1976,7 +2048,9 @@ export function upsertContactMappingSuggestion(input: {
   return getContactMappingSuggestion(id)!;
 }
 
-export function getContactMappingSuggestion(id: string): ContactMappingSuggestion | undefined {
+export function getContactMappingSuggestion(
+  id: string,
+): ContactMappingSuggestion | undefined {
   const row = ensureDb()
     .prepare(`SELECT * FROM contact_mapping_suggestions WHERE id = ?`)
     .get(id);
@@ -2067,7 +2141,9 @@ export function upsertMemoryFact(input: {
       input.value,
       input.confidence ?? existing?.confidence ?? 0.8,
       input.status ?? existing?.status ?? 'suggested',
-      JSON.stringify(input.provenance ?? parseJson<string[]>(existing?.provenance, [])),
+      JSON.stringify(
+        input.provenance ?? parseJson<string[]>(existing?.provenance, []),
+      ),
       input.sourceRecordKey ?? existing?.source_record_key ?? null,
       input.contactId ?? existing?.contact_id ?? null,
       input.clientId ?? existing?.client_id ?? null,
@@ -2081,7 +2157,9 @@ export function upsertMemoryFact(input: {
 }
 
 export function getMemoryFact(id: string): MemoryFact | undefined {
-  const row = ensureDb().prepare(`SELECT * FROM memory_facts WHERE id = ?`).get(id);
+  const row = ensureDb()
+    .prepare(`SELECT * FROM memory_facts WHERE id = ?`)
+    .get(id);
   return row ? mapMemoryFact(row) : undefined;
 }
 
@@ -2137,7 +2215,9 @@ export function upsertAccountScopedContactHint(input: {
   lastSeenAt?: string | null;
 }): AccountScopedContactHint {
   const existing = ensureDb()
-    .prepare(`SELECT * FROM account_scoped_contact_hints WHERE dedupe_key = ? LIMIT 1`)
+    .prepare(
+      `SELECT * FROM account_scoped_contact_hints WHERE dedupe_key = ? LIMIT 1`,
+    )
     .get(input.dedupeKey) as any;
   const now = new Date().toISOString();
   const id = existing?.id || input.id || `account_hint_${randomUUID()}`;
@@ -2185,7 +2265,9 @@ export function upsertAccountScopedContactHint(input: {
   return getAccountScopedContactHint(id)!;
 }
 
-export function getAccountScopedContactHint(id: string): AccountScopedContactHint | undefined {
+export function getAccountScopedContactHint(
+  id: string,
+): AccountScopedContactHint | undefined {
   const row = ensureDb()
     .prepare(`SELECT * FROM account_scoped_contact_hints WHERE id = ?`)
     .get(id);
@@ -2305,8 +2387,12 @@ export function upsertAssistantQuestion(input: {
   return getAssistantQuestion(id)!;
 }
 
-export function getAssistantQuestion(id: string): AssistantQuestion | undefined {
-  const row = ensureDb().prepare(`SELECT * FROM assistant_questions WHERE id = ?`).get(id);
+export function getAssistantQuestion(
+  id: string,
+): AssistantQuestion | undefined {
+  const row = ensureDb()
+    .prepare(`SELECT * FROM assistant_questions WHERE id = ?`)
+    .get(id);
   return row ? mapAssistantQuestion(row) : undefined;
 }
 
@@ -2344,7 +2430,9 @@ export function listAssistantQuestions(filters?: {
     values.push(filters.urgency);
   }
   if (!filters?.includeSnoozed) {
-    clauses.push(`(status != 'snoozed' OR snooze_until IS NULL OR snooze_until <= ?)`);
+    clauses.push(
+      `(status != 'snoozed' OR snooze_until IS NULL OR snooze_until <= ?)`,
+    );
     values.push(new Date().toISOString());
   }
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
@@ -2425,8 +2513,12 @@ export function upsertImprovementTicket(input: {
   return getImprovementTicket(id)!;
 }
 
-export function getImprovementTicket(id: string): ImprovementTicket | undefined {
-  const row = ensureDb().prepare(`SELECT * FROM improvement_tickets WHERE id = ?`).get(id);
+export function getImprovementTicket(
+  id: string,
+): ImprovementTicket | undefined {
+  const row = ensureDb()
+    .prepare(`SELECT * FROM improvement_tickets WHERE id = ?`)
+    .get(id);
   return row ? mapImprovementTicket(row) : undefined;
 }
 
@@ -2468,7 +2560,9 @@ export function upsertWorkItem(input: {
   notes?: string;
 }): WorkItem {
   const existing = input.id
-    ? (ensureDb().prepare(`SELECT * FROM work_items WHERE id = ?`).get(input.id) as any)
+    ? (ensureDb()
+        .prepare(`SELECT * FROM work_items WHERE id = ?`)
+        .get(input.id) as any)
     : null;
   const now = new Date().toISOString();
   const id = existing?.id || input.id || `work_${randomUUID()}`;
@@ -2508,8 +2602,15 @@ export function upsertWorkItem(input: {
       input.priority || existing?.priority || 'medium',
       input.status || existing?.status || 'open',
       input.confidence ?? existing?.confidence ?? null,
-      input.needsReview === undefined ? existing?.needs_review ?? 0 : input.needsReview ? 1 : 0,
-      JSON.stringify(input.linkedContactIds ?? parseJson<string[]>(existing?.linked_contact_ids, [])),
+      input.needsReview === undefined
+        ? (existing?.needs_review ?? 0)
+        : input.needsReview
+          ? 1
+          : 0,
+      JSON.stringify(
+        input.linkedContactIds ??
+          parseJson<string[]>(existing?.linked_contact_ids, []),
+      ),
       input.openLoopState ?? existing?.open_loop_state ?? 'action',
       input.notes || existing?.notes || '',
       existing?.created_at || now,
@@ -2519,7 +2620,9 @@ export function upsertWorkItem(input: {
 }
 
 export function getWorkItem(id: string): WorkItem | undefined {
-  const row = ensureDb().prepare(`SELECT * FROM work_items WHERE id = ?`).get(id);
+  const row = ensureDb()
+    .prepare(`SELECT * FROM work_items WHERE id = ?`)
+    .get(id);
   return row ? mapWorkItem(row) : undefined;
 }
 
@@ -2563,7 +2666,9 @@ export function listWorkItems(filters?: {
     .map(mapWorkItem);
 }
 
-export function addActivity(input: Omit<Activity, 'id'> & { id?: string }): Activity {
+export function addActivity(
+  input: Omit<Activity, 'id'> & { id?: string },
+): Activity {
   const id = input.id || `activity_${randomUUID()}`;
   ensureDb()
     .prepare(
@@ -2589,7 +2694,9 @@ export function addActivity(input: Omit<Activity, 'id'> & { id?: string }): Acti
 }
 
 export function getActivity(id: string): Activity | undefined {
-  const row = ensureDb().prepare(`SELECT * FROM activities WHERE id = ?`).get(id);
+  const row = ensureDb()
+    .prepare(`SELECT * FROM activities WHERE id = ?`)
+    .get(id);
   return row ? mapActivity(row) : undefined;
 }
 
@@ -2628,7 +2735,9 @@ export function listActivities(filters?: {
     .map(mapActivity);
 }
 
-export function addReportSnapshot(input: Omit<ReportSnapshot, 'id'> & { id?: string }): ReportSnapshot {
+export function addReportSnapshot(
+  input: Omit<ReportSnapshot, 'id'> & { id?: string },
+): ReportSnapshot {
   const id = input.id || `report_${randomUUID()}`;
   ensureDb()
     .prepare(
@@ -2651,7 +2760,9 @@ export function addReportSnapshot(input: Omit<ReportSnapshot, 'id'> & { id?: str
 }
 
 export function getReportSnapshot(id: string): ReportSnapshot | undefined {
-  const row = ensureDb().prepare(`SELECT * FROM report_snapshots WHERE id = ?`).get(id);
+  const row = ensureDb()
+    .prepare(`SELECT * FROM report_snapshots WHERE id = ?`)
+    .get(id);
   return row ? mapReport(row) : undefined;
 }
 
@@ -2679,7 +2790,9 @@ export function listReportSnapshots(
       .map(mapReport);
   }
   return ensureDb()
-    .prepare(`SELECT * FROM report_snapshots ORDER BY generated_at DESC LIMIT ?`)
+    .prepare(
+      `SELECT * FROM report_snapshots ORDER BY generated_at DESC LIMIT ?`,
+    )
     .all(limit)
     .map(mapReport);
 }
@@ -2751,8 +2864,13 @@ export function upsertApprovalQueueItem(input: {
       input.sourceRecordKey ?? existing?.source_record_key ?? null,
       input.workItemId ?? existing?.work_item_id ?? null,
       input.reportType ?? existing?.report_type ?? null,
-      JSON.stringify(input.linkedContactIds ?? parseJson<string[]>(existing?.linked_contact_ids, [])),
-      JSON.stringify(input.evidence ?? parseJson<string[]>(existing?.evidence, [])),
+      JSON.stringify(
+        input.linkedContactIds ??
+          parseJson<string[]>(existing?.linked_contact_ids, []),
+      ),
+      JSON.stringify(
+        input.evidence ?? parseJson<string[]>(existing?.evidence, []),
+      ),
       input.artifactRef ?? existing?.artifact_ref ?? null,
       existing?.created_at || now,
       now,
@@ -2761,8 +2879,12 @@ export function upsertApprovalQueueItem(input: {
   return getApprovalQueueItem(id)!;
 }
 
-export function getApprovalQueueItem(id: string): ApprovalQueueItem | undefined {
-  const row = ensureDb().prepare(`SELECT * FROM approval_queue_items WHERE id = ?`).get(id);
+export function getApprovalQueueItem(
+  id: string,
+): ApprovalQueueItem | undefined {
+  const row = ensureDb()
+    .prepare(`SELECT * FROM approval_queue_items WHERE id = ?`)
+    .get(id);
   return row ? mapApprovalQueueItem(row) : undefined;
 }
 
@@ -2791,7 +2913,9 @@ export function listApprovalQueueItems(filters?: {
     .map(mapApprovalQueueItem);
 }
 
-export function addCorrection(input: Omit<Correction, 'id' | 'createdAt'>): Correction {
+export function addCorrection(
+  input: Omit<Correction, 'id' | 'createdAt'>,
+): Correction {
   const id = `correction_${randomUUID()}`;
   const createdAt = new Date().toISOString();
   ensureDb()
@@ -2799,12 +2923,21 @@ export function addCorrection(input: Omit<Correction, 'id' | 'createdAt'>): Corr
       `INSERT INTO corrections (id, target_type, target_id, field, value, created_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
     )
-    .run(id, input.targetType, input.targetId, input.field, input.value, createdAt);
+    .run(
+      id,
+      input.targetType,
+      input.targetId,
+      input.field,
+      input.value,
+      createdAt,
+    );
   return getCorrection(id)!;
 }
 
 export function getCorrection(id: string): Correction | undefined {
-  const row = ensureDb().prepare(`SELECT * FROM corrections WHERE id = ?`).get(id);
+  const row = ensureDb()
+    .prepare(`SELECT * FROM corrections WHERE id = ?`)
+    .get(id);
   return row ? mapCorrection(row) : undefined;
 }
 
@@ -2825,7 +2958,9 @@ export function setPreference(key: string, value: string): void {
 }
 
 export function getPreference(key: string): PersonalOpsPreference | undefined {
-  const row = ensureDb().prepare(`SELECT * FROM preferences WHERE key = ?`).get(key) as any;
+  const row = ensureDb()
+    .prepare(`SELECT * FROM preferences WHERE key = ?`)
+    .get(key) as any;
   if (!row) return undefined;
   return {
     key: row.key,

@@ -43,7 +43,9 @@ describe('runtime selection', () => {
   });
 
   it('preserves apple-container selection', () => {
-    expect(normalizeContainerRuntime('apple-container')).toBe('apple-container');
+    expect(normalizeContainerRuntime('apple-container')).toBe(
+      'apple-container',
+    );
   });
 });
 
@@ -67,14 +69,12 @@ describe('runtime helpers', () => {
   });
 
   it('uses --volume syntax for mounts', () => {
-    expect(mountArgs('/host/path', '/container/path', false, 'docker')).toEqual([
-      '--volume',
-      '/host/path:/container/path',
-    ]);
-    expect(readonlyMountArgs('/host/path', '/container/path', 'apple-container')).toEqual([
-      '--volume',
-      '/host/path:/container/path:ro',
-    ]);
+    expect(mountArgs('/host/path', '/container/path', false, 'docker')).toEqual(
+      ['--volume', '/host/path:/container/path'],
+    );
+    expect(
+      readonlyMountArgs('/host/path', '/container/path', 'apple-container'),
+    ).toEqual(['--volume', '/host/path:/container/path:ro']);
   });
 
   it('disables uid mapping for apple-container', () => {
@@ -168,10 +168,13 @@ describe('ensureContainerRuntimeRunning', () => {
 
     ensureContainerRuntimeRunning('apple-container');
 
-    expect(mockExecSync).toHaveBeenCalledWith('container ls --format json --all', {
-      stdio: 'pipe',
-      timeout: 10000,
-    });
+    expect(mockExecSync).toHaveBeenCalledWith(
+      'container ls --format json --all',
+      {
+        stdio: 'pipe',
+        timeout: 10000,
+      },
+    );
   });
 
   it('throws when the selected runtime is unavailable', () => {
@@ -188,7 +191,9 @@ describe('ensureContainerRuntimeRunning', () => {
 
 describe('cleanupOrphans', () => {
   it('stops orphaned docker containers', () => {
-    mockExecSync.mockReturnValueOnce('nanoclaw-group1-111\nnanoclaw-group2-222\n');
+    mockExecSync.mockReturnValueOnce(
+      'nanoclaw-group1-111\nnanoclaw-group2-222\n',
+    );
     mockExecSync.mockReturnValue('');
 
     cleanupOrphans('docker');
