@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { PERSONAL_OPS_STORE_DIR } from '../config.js';
+import { decryptLocalSecret, encryptLocalSecret } from '../secret-storage.js';
 import {
   AccountScopedContactHint,
   ApprovalQueueItem,
@@ -801,8 +802,8 @@ function mapConnectedAccount(row: ConnectedAccountRow): ConnectedAccountRecord {
     accountId: row.account_id || null,
     baseUrl: row.base_url,
     scopes: parseJson<string[]>(row.scopes, []),
-    accessToken: row.access_token,
-    refreshToken: row.refresh_token,
+    accessToken: decryptLocalSecret(row.access_token),
+    refreshToken: decryptLocalSecret(row.refresh_token),
     expiresAt: row.expires_at,
     resourceId: row.resource_id,
     lastSyncAt: row.last_sync_at,
@@ -1356,12 +1357,12 @@ export function upsertConnectedAccount(input: {
       scopes: JSON.stringify(input.scopes ?? existing?.scopes ?? []),
       access_token:
         input.accessToken !== undefined
-          ? input.accessToken
-          : (existing?.accessToken ?? null),
+          ? encryptLocalSecret(input.accessToken)
+          : encryptLocalSecret(existing?.accessToken ?? null),
       refresh_token:
         input.refreshToken !== undefined
-          ? input.refreshToken
-          : (existing?.refreshToken ?? null),
+          ? encryptLocalSecret(input.refreshToken)
+          : encryptLocalSecret(existing?.refreshToken ?? null),
       expires_at:
         input.expiresAt !== undefined
           ? input.expiresAt

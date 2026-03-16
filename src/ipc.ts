@@ -6,6 +6,12 @@ import { CronExpressionParser } from 'cron-parser';
 import { DATA_DIR, IPC_POLL_INTERVAL, TIMEZONE } from './config.js';
 import { AvailableGroup } from './container-runner.js';
 import { createTask, deleteTask, getTaskById, updateTask } from './db.js';
+import {
+  assertSafeIpcId,
+  listSafeJsonFiles,
+  safeReadUtf8FileNoFollow,
+  unlinkIfExists,
+} from './fs-security.js';
 import { isValidGroupFolder } from './group-folder.js';
 import { logger } from './logger.js';
 import { PersonalOpsService } from './personal-ops/service.js';
@@ -69,13 +75,11 @@ export function startIpcWatcher(deps: IpcDeps): void {
       // Process messages from this group's IPC directory
       try {
         if (fs.existsSync(messagesDir)) {
-          const messageFiles = fs
-            .readdirSync(messagesDir)
-            .filter((f) => f.endsWith('.json'));
+          const messageFiles = listSafeJsonFiles(messagesDir);
           for (const file of messageFiles) {
             const filePath = path.join(messagesDir, file);
             try {
-              const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+              const data = JSON.parse(safeReadUtf8FileNoFollow(filePath));
               if (data.type === 'message' && data.chatJid && data.text) {
                 // Authorization: verify this group can send to this chatJid
                 const targetGroup = registeredGroups[data.chatJid];
@@ -95,18 +99,14 @@ export function startIpcWatcher(deps: IpcDeps): void {
                   );
                 }
               }
-              fs.unlinkSync(filePath);
+              unlinkIfExists(filePath);
             } catch (err) {
               logger.error(
                 { file, sourceGroup, err },
                 'Error processing IPC message',
               );
-              const errorDir = path.join(ipcBaseDir, 'errors');
-              fs.mkdirSync(errorDir, { recursive: true });
-              fs.renameSync(
-                filePath,
-                path.join(errorDir, `${sourceGroup}-${file}`),
-              );
+              unlinkIfExists(filePath);
+              continue;
             }
           }
         }
@@ -120,27 +120,21 @@ export function startIpcWatcher(deps: IpcDeps): void {
       // Process tasks from this group's IPC directory
       try {
         if (fs.existsSync(tasksDir)) {
-          const taskFiles = fs
-            .readdirSync(tasksDir)
-            .filter((f) => f.endsWith('.json'));
+          const taskFiles = listSafeJsonFiles(tasksDir);
           for (const file of taskFiles) {
             const filePath = path.join(tasksDir, file);
             try {
-              const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+              const data = JSON.parse(safeReadUtf8FileNoFollow(filePath));
               // Pass source group identity to processTaskIpc for authorization
               await processTaskIpc(data, sourceGroup, isMain, deps);
-              fs.unlinkSync(filePath);
+              unlinkIfExists(filePath);
             } catch (err) {
               logger.error(
                 { file, sourceGroup, err },
                 'Error processing IPC task',
               );
-              const errorDir = path.join(ipcBaseDir, 'errors');
-              fs.mkdirSync(errorDir, { recursive: true });
-              fs.renameSync(
-                filePath,
-                path.join(errorDir, `${sourceGroup}-${file}`),
-              );
+              unlinkIfExists(filePath);
+              continue;
             }
           }
         }
@@ -150,26 +144,20 @@ export function startIpcWatcher(deps: IpcDeps): void {
 
       try {
         if (fs.existsSync(personalOpsDir)) {
-          const files = fs
-            .readdirSync(personalOpsDir)
-            .filter((f) => f.endsWith('.json'));
+          const files = listSafeJsonFiles(personalOpsDir);
           for (const file of files) {
             const filePath = path.join(personalOpsDir, file);
             try {
-              const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+              const data = JSON.parse(safeReadUtf8FileNoFollow(filePath));
               await processPersonalOpsIpc(data, sourceGroup, isMain, deps);
-              fs.unlinkSync(filePath);
+              unlinkIfExists(filePath);
             } catch (err) {
               logger.error(
                 { file, sourceGroup, err },
                 'Error processing IPC personal ops request',
               );
-              const errorDir = path.join(ipcBaseDir, 'errors');
-              fs.mkdirSync(errorDir, { recursive: true });
-              fs.renameSync(
-                filePath,
-                path.join(errorDir, `${sourceGroup}-${file}`),
-              );
+              unlinkIfExists(filePath);
+              continue;
             }
           }
         }
@@ -213,14 +201,28 @@ async function processPersonalOpsIpc(
     return;
   }
   if (data.type === 'get_snapshot' && data.requestId && data.snapshotName) {
+    const safeRequestId = assertSafeIpcId(data.requestId, 'personal ops request id');
     const responsesDir = path.join(
       DATA_DIR,
       'ipc',
       sourceGroup,
+      'state',
       'personal-ops-responses',
     );
     fs.mkdirSync(responsesDir, { recursive: true });
-    const responsePath = path.join(responsesDir, `${data.requestId}.json`);
+    const staleCutoff = Date.now() - 60 * 60 * 1000;
+    for (const file of listSafeJsonFiles(responsesDir)) {
+      const filePath = path.join(responsesDir, file);
+      try {
+        const stats = fs.statSync(filePath);
+        if (stats.mtimeMs < staleCutoff) {
+          unlinkIfExists(filePath);
+        }
+      } catch {
+        unlinkIfExists(filePath);
+      }
+    }
+    const responsePath = path.join(responsesDir, `${safeRequestId}.json`);
     let output: unknown;
     let error: string | null = null;
 

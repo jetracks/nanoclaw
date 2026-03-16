@@ -10,6 +10,7 @@ import {
   LOCAL_CHANNEL_PORT,
 } from '../config.js';
 import { logger } from '../logger.js';
+import { isAllowedLoopbackHost } from '../network-security.js';
 import { Channel, NewMessage } from '../types.js';
 import { ChannelOpts, registerChannel } from './registry.js';
 
@@ -218,8 +219,7 @@ export class LocalChannel implements Channel {
   private isAuthorized(req: IncomingMessage, url: URL): boolean {
     const header = req.headers['x-nanoclaw-local-token'];
     const headerValue = Array.isArray(header) ? header[0] || '' : header || '';
-    const queryValue = url.searchParams.get('token') || '';
-    return headerValue === this.authToken || queryValue === this.authToken;
+    return headerValue === this.authToken;
   }
 
   private async handleRequest(
@@ -227,6 +227,10 @@ export class LocalChannel implements Channel {
     res: ServerResponse,
   ): Promise<void> {
     const url = new URL(req.url || '/', `http://${this.config.host}`);
+    if (!isAllowedLoopbackHost(req.headers.host, [this.config.host])) {
+      writeJson(res, 400, { ok: false, error: 'Invalid Host header.' });
+      return;
+    }
 
     if (req.method === 'GET' && url.pathname === '/health') {
       writeJson(res, 200, {

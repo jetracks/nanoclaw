@@ -1,7 +1,7 @@
 # NanoClaw Agent Container
 # Runs the OpenAI agent runtime in an isolated Linux VM with browser automation
 
-FROM node:22-slim
+FROM node:22.22.0-slim
 
 # Install system dependencies for Chromium
 RUN apt-get update && apt-get install -y \
@@ -30,9 +30,10 @@ RUN apt-get update && apt-get install -y \
 # Set Chromium path for agent-browser
 ENV AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
+ARG AGENT_BROWSER_VERSION=0.20.12
 
-# Install agent-browser globally
-RUN npm install -g agent-browser
+# Install agent-browser globally with an exact version
+RUN npm install -g "agent-browser@${AGENT_BROWSER_VERSION}"
 
 # Create app directory
 WORKDIR /app
@@ -40,8 +41,8 @@ WORKDIR /app
 # Copy package files first for better caching
 COPY agent-runner/package*.json ./
 
-# Install dependencies
-RUN npm install
+# Install dependencies from the lockfile only
+RUN npm ci
 
 # Copy source code
 COPY agent-runner/ ./
@@ -50,7 +51,7 @@ COPY agent-runner/ ./
 RUN npm run build
 
 # Create workspace directories
-RUN mkdir -p /workspace/group /workspace/global /workspace/extra /workspace/ipc/messages /workspace/ipc/tasks /workspace/ipc/input /workspace/session/openai
+RUN mkdir -p /workspace/group /workspace/global /workspace/extra /workspace/ipc/messages /workspace/ipc/tasks /workspace/ipc/input /workspace/ipc/personal-ops /workspace/ipc/state/personal-ops-responses /workspace/session/openai
 
 # Create entrypoint script
 # Container input (prompt, group info) is passed via stdin JSON.

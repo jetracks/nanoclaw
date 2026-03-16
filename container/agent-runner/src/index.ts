@@ -47,13 +47,13 @@ interface FunctionContext {
 }
 
 const IPC_INPUT_DIR = '/workspace/ipc/input';
-const IPC_INPUT_CLOSE_SENTINEL = path.join(IPC_INPUT_DIR, '_close');
+const IPC_STATE_DIR = '/workspace/ipc/state';
 const IPC_POLL_MS = 500;
 const WORKSPACE_ROOT = '/workspace/group';
 const SESSION_ROOT = '/workspace/session';
 const OPENAI_SESSION_ROOT = path.join(SESSION_ROOT, 'openai');
 const CONVERSATIONS_DIR = path.join(WORKSPACE_ROOT, 'conversations');
-const TASKS_FILE = '/workspace/ipc/current_tasks.json';
+const TASKS_FILE = path.join(IPC_STATE_DIR, 'current_tasks.json');
 const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
 const OUTPUT_END_MARKER = '---NANOCLAW_OUTPUT_END---';
 const COMPACTION_LINE_THRESHOLD = 200;
@@ -138,7 +138,7 @@ function buildInstructions(
 - Use the built-in local shell tool for file reads/writes, command execution, and inspection.
 - Use the built-in apply_patch tool for file diffs when it is the most direct option.
 - Use web search when current external information is required.
-- Available groups snapshot: /workspace/ipc/available_groups.json
+- Available groups snapshot: /workspace/ipc/state/available_groups.json
 - Scheduled tasks snapshot: ${TASKS_FILE}
 - Wrap internal-only notes in <internal>...</internal> so NanoClaw suppresses them.`,
     `Capability rules:
@@ -176,13 +176,28 @@ function buildInstructions(
 }
 
 function shouldClose(): boolean {
-  if (!fs.existsSync(IPC_INPUT_CLOSE_SENTINEL)) return false;
   try {
-    fs.unlinkSync(IPC_INPUT_CLOSE_SENTINEL);
+    ensureDir(IPC_INPUT_DIR);
+    const files = fs
+      .readdirSync(IPC_INPUT_DIR)
+      .filter((file) => file.endsWith('.json'))
+      .sort();
+    for (const file of files) {
+      const filePath = path.join(IPC_INPUT_DIR, file);
+      try {
+        const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        if (parsed.type === 'close') {
+          fs.unlinkSync(filePath);
+          return true;
+        }
+      } catch {
+        // ignore malformed files here; drainIpcInput will handle them
+      }
+    }
   } catch {
     // ignore
   }
-  return true;
+  return false;
 }
 
 function drainIpcInput(): string[] {
@@ -259,7 +274,7 @@ function readTasksSnapshot(): Array<Record<string, unknown>> {
 
 async function readPersonalOpsSnapshot(name: string): Promise<string> {
   const personalOpsDir = '/workspace/ipc/personal-ops';
-  const responsesDir = '/workspace/ipc/personal-ops-responses';
+  const responsesDir = path.join(IPC_STATE_DIR, 'personal-ops-responses');
   const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   const responsePath = path.join(responsesDir, `${requestId}.json`);
 
@@ -278,17 +293,11 @@ async function readPersonalOpsSnapshot(name: string): Promise<string> {
           output?: string;
           error?: string;
         };
-        fs.unlinkSync(responsePath);
         if (payload.ok && typeof payload.output === 'string') {
           return payload.output;
         }
         return payload.error || `No personal ops snapshot is available for "${name}".`;
       } catch {
-        try {
-          fs.unlinkSync(responsePath);
-        } catch {
-          // ignore
-        }
         return `Failed to read personal ops snapshot "${name}".`;
       }
     }
@@ -1248,11 +1257,6 @@ async function main(): Promise<void> {
 
   ensureDir(OPENAI_SESSION_ROOT);
   ensureDir(IPC_INPUT_DIR);
-  try {
-    fs.unlinkSync(IPC_INPUT_CLOSE_SENTINEL);
-  } catch {
-    // ignore
-  }
 
   const pending = drainIpcInput();
   let prompt = containerInput.prompt;

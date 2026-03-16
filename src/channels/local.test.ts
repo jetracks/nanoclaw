@@ -83,9 +83,9 @@ describe('local channel', () => {
     );
 
     await channel.sendMessage('local:main', 'assistant reply');
-    const outboxResponse = await fetch(
-      `${channel.getBaseUrl()}/outbox?chatJid=local%3Amain&token=${channel.getAuthToken()}`,
-    );
+    const outboxResponse = await fetch(`${channel.getBaseUrl()}/outbox?chatJid=local%3Amain`, {
+      headers: { 'x-nanoclaw-local-token': channel.getAuthToken() },
+    });
     const outbox = (await outboxResponse.json()) as {
       ok: boolean;
       messages: Array<{ jid: string; text: string }>;

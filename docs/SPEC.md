@@ -1,4 +1,4 @@
-> Historical note: this document describes the pre-OpenAI Claude-era architecture and is kept only for migration context. Follow `README.md`, `AGENTS.md`, and current runtime code instead.
+> Archived document: this file describes the pre-OpenAI Claude-era architecture and is kept only for migration context. It is not the current NanoClaw contract. Follow `README.md`, `docs/README.md`, `AGENTS.md`, and the current runtime code instead.
 
 # NanoClaw Specification
 

@@ -14,6 +14,7 @@ import {
   TIMEZONE,
 } from './config.js';
 import { logger } from './logger.js';
+import { isAllowedLoopbackHost } from './network-security.js';
 import {
   extractAssistantMessages,
   extractToolEvents,
@@ -397,6 +398,10 @@ function requestAuthHeader(req: IncomingMessage): string {
     return value[0] || '';
   }
   return value || '';
+}
+
+function hasAllowedOperatorUiHost(req: IncomingMessage): boolean {
+  return isAllowedLoopbackHost(req.headers.host, [OPERATOR_UI_HOST]);
 }
 
 function hasValidOperatorUiAuth(req: IncomingMessage): boolean {
@@ -1984,18 +1989,28 @@ function legacyHtml(): string {
       await refreshDashboard();
     };
 
-    document.getElementById('connectGoogleButton').onclick = () => {
-      window.location.href = '/oauth/google/start?token=' + encodeURIComponent(operatorToken);
-    };
-    document.getElementById('connectMicrosoftButton').onclick = () => {
-      window.location.href = '/oauth/microsoft/start?token=' + encodeURIComponent(operatorToken);
-    };
-    document.getElementById('connectJiraButton').onclick = () => {
-      window.location.href = '/oauth/jira/start?token=' + encodeURIComponent(operatorToken);
-    };
-    document.getElementById('connectSlackButton').onclick = () => {
-      window.location.href = '/oauth/slack/start?token=' + encodeURIComponent(operatorToken);
-    };
+    async function beginOAuth(provider) {
+      const res = await fetch('/api/connections/' + provider + '/start', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          '${OPERATOR_UI_AUTH_HEADER}': operatorToken,
+        },
+        body: JSON.stringify({}),
+      });
+      const payload = await res.json();
+      if (payload.ok && payload.url) {
+        window.location.href = payload.url;
+        return;
+      }
+      document.getElementById('refreshMeta').textContent =
+        payload.error || ('Failed to connect ' + provider + '.');
+    }
+
+    document.getElementById('connectGoogleButton').onclick = () => beginOAuth('google');
+    document.getElementById('connectMicrosoftButton').onclick = () => beginOAuth('microsoft');
+    document.getElementById('connectJiraButton').onclick = () => beginOAuth('jira');
+    document.getElementById('connectSlackButton').onclick = () => beginOAuth('slack');
 
     document.getElementById('createManualTaskButton').onclick = async () => {
       const title = document.getElementById('manualTaskTitle').value.trim();
@@ -4297,6 +4312,11 @@ async function handleRequest(
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
+  if (!hasAllowedOperatorUiHost(req)) {
+    res.statusCode = 400;
+    res.end('Invalid Host header');
+    return;
+  }
   const deps = operatorUiState.dependencies;
   if (!deps) {
     writeJson(res, 500, {
@@ -4334,18 +4354,8 @@ async function handleRequest(
       return;
     }
     if (routeParts[2] === 'start') {
-      if (url.searchParams.get('token') !== ensureOperatorUiAuthToken()) {
-        res.statusCode = 403;
-        res.end('Operator UI session token is required.');
-        return;
-      }
-      const authUrl = deps.personalOps.beginOAuth(
-        provider,
-        getOperatorUiBaseUrl(),
-      );
-      res.statusCode = 302;
-      res.setHeader('location', authUrl);
-      res.end();
+      res.statusCode = 405;
+      res.end('Use the authenticated API connection start route.');
       return;
     }
     if (routeParts[2] === 'callback') {

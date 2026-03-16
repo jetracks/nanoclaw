@@ -37,6 +37,8 @@ import { OpenAISessionState, RegisteredGroup } from './types.js';
 // Sentinel markers for robust output parsing (must match agent-runner)
 const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
 const OUTPUT_END_MARKER = '---NANOCLAW_OUTPUT_END---';
+const PERSIST_AGENT_RUNNER_CUSTOMIZATIONS =
+  process.env.NANOCLAW_PERSIST_AGENT_RUNNER_SOURCE === 'true';
 
 export interface ContainerInput {
   prompt: string;
@@ -128,7 +130,7 @@ function syncAgentRunnerSource(
   }
 
   const currentGroupHash = hashDirectory(groupAgentRunnerDir);
-  if (currentGroupHash !== storedHash) {
+  if (currentGroupHash !== storedHash && PERSIST_AGENT_RUNNER_CUSTOMIZATIONS) {
     logger.info(
       { group: groupName },
       'Preserving customized per-group agent-runner source cache',
@@ -137,6 +139,15 @@ function syncAgentRunnerSource(
   }
 
   if (storedHash === sourceHash) {
+    if (currentGroupHash !== storedHash) {
+      fs.rmSync(groupAgentRunnerDir, { recursive: true, force: true });
+      fs.cpSync(agentRunnerSrc, groupAgentRunnerDir, { recursive: true });
+      fs.writeFileSync(metadataPath, JSON.stringify({ sourceHash }, null, 2));
+      logger.warn(
+        { group: groupName },
+        'Reset untrusted per-group agent-runner customization to trusted source',
+      );
+    }
     return;
   }
 
@@ -219,14 +230,49 @@ function buildVolumeMounts(
   // Per-group IPC namespace: each group gets its own IPC directory
   // This prevents cross-group privilege escalation via IPC
   const groupIpcDir = resolveGroupIpcPath(group.folder);
-  fs.mkdirSync(path.join(groupIpcDir, 'messages'), { recursive: true });
-  fs.mkdirSync(path.join(groupIpcDir, 'tasks'), { recursive: true });
-  fs.mkdirSync(path.join(groupIpcDir, 'input'), { recursive: true });
-  mounts.push({
-    hostPath: groupIpcDir,
-    containerPath: '/workspace/ipc',
-    readonly: false,
-  });
+  const messageDir = path.join(groupIpcDir, 'messages');
+  const taskDir = path.join(groupIpcDir, 'tasks');
+  const inputDir = path.join(groupIpcDir, 'input');
+  const personalOpsDir = path.join(groupIpcDir, 'personal-ops');
+  const stateDir = path.join(groupIpcDir, 'state');
+  const responsesDir = path.join(stateDir, 'personal-ops-responses');
+  for (const dir of [
+    messageDir,
+    taskDir,
+    inputDir,
+    personalOpsDir,
+    stateDir,
+    responsesDir,
+  ]) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  mounts.push(
+    {
+      hostPath: messageDir,
+      containerPath: '/workspace/ipc/messages',
+      readonly: false,
+    },
+    {
+      hostPath: taskDir,
+      containerPath: '/workspace/ipc/tasks',
+      readonly: false,
+    },
+    {
+      hostPath: inputDir,
+      containerPath: '/workspace/ipc/input',
+      readonly: false,
+    },
+    {
+      hostPath: personalOpsDir,
+      containerPath: '/workspace/ipc/personal-ops',
+      readonly: false,
+    },
+    {
+      hostPath: stateDir,
+      containerPath: '/workspace/ipc/state',
+      readonly: true,
+    },
+  );
 
   // Copy agent-runner source into a per-group writable location so agents
   // can customize it (add tools, change behavior) without affecting other
@@ -363,7 +409,7 @@ export async function runContainerAgent(
     'Spawning container agent',
   );
 
-  const logsDir = path.join(groupDir, 'logs');
+  const logsDir = path.join(DATA_DIR, 'host-logs', group.folder);
   fs.mkdirSync(logsDir, { recursive: true });
 
   return new Promise((resolve) => {
@@ -723,16 +769,16 @@ export function writeTasksSnapshot(
     next_run: string | null;
   }>,
 ): void {
-  // Write filtered tasks to the group's IPC directory
   const groupIpcDir = resolveGroupIpcPath(groupFolder);
-  fs.mkdirSync(groupIpcDir, { recursive: true });
+  const stateDir = path.join(groupIpcDir, 'state');
+  fs.mkdirSync(stateDir, { recursive: true });
 
   // Main sees all tasks, others only see their own
   const filteredTasks = isMain
     ? tasks
     : tasks.filter((t) => t.groupFolder === groupFolder);
 
-  const tasksFile = path.join(groupIpcDir, 'current_tasks.json');
+  const tasksFile = path.join(stateDir, 'current_tasks.json');
   fs.writeFileSync(tasksFile, JSON.stringify(filteredTasks, null, 2));
 }
 
@@ -755,12 +801,13 @@ export function writeGroupsSnapshot(
   registeredJids: Set<string>,
 ): void {
   const groupIpcDir = resolveGroupIpcPath(groupFolder);
-  fs.mkdirSync(groupIpcDir, { recursive: true });
+  const stateDir = path.join(groupIpcDir, 'state');
+  fs.mkdirSync(stateDir, { recursive: true });
 
   // Main sees all groups; others see nothing (they can't activate groups)
   const visibleGroups = isMain ? groups : [];
 
-  const groupsFile = path.join(groupIpcDir, 'available_groups.json');
+  const groupsFile = path.join(stateDir, 'available_groups.json');
   fs.writeFileSync(
     groupsFile,
     JSON.stringify(

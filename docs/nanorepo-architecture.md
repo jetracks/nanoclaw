@@ -1,3 +1,5 @@
+> Archived document: this file captures an older skills-architecture proposal and is not the current NanoClaw contract. Follow `README.md`, `docs/README.md`, and the current runtime code instead.
+
 # NanoClaw Skills Architecture
 
 ## What Skills Are For

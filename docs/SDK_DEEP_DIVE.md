@@ -1,4 +1,4 @@
-> Historical note: this reverse-engineering document covers the removed Claude SDK runtime and is no longer the active NanoClaw architecture.
+> Archived document: this reverse-engineering file covers the removed Claude SDK runtime and is not the active NanoClaw architecture. Follow `README.md`, `docs/README.md`, and the current OpenAI runtime code instead.
 
 # Claude Agent SDK Deep Dive
 

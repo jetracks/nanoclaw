@@ -1,145 +1,207 @@
-> Historical note: this checklist was written against the removed Claude runtime and is kept only for migration context. Prefer `README.md`, `AGENTS.md`, and current runtime code for the active OpenAI system.
-
 # NanoClaw Debug Checklist
 
-## Known Issues (2026-02-08)
+Use this checklist for the current OpenAI-based runtime.
 
-### 1. [FIXED] Resume branches from stale tree position
-When agent teams spawns subagent CLI processes, they write to the same session JSONL. On subsequent `query()` resumes, the CLI reads the JSONL but may pick a stale branch tip (from before the subagent activity), causing the agent's response to land on a branch the host never receives a `result` for. **Fix**: pass `resumeSessionAt` with the last assistant message UUID to explicitly anchor each resume.
-
-### 2. IDLE_TIMEOUT == CONTAINER_TIMEOUT (both 30 min)
-Both timers fire at the same time, so containers always exit via hard SIGKILL (code 137) instead of graceful `_close` sentinel shutdown. The idle timeout should be shorter (e.g., 5 min) so containers wind down between messages, while container timeout stays at 30 min as a safety net for stuck agents.
-
-### 3. Cursor advanced before agent succeeds
-`processGroupMessages` advances `lastAgentTimestamp` before the agent runs. If the container times out, retries find no messages (cursor already past them). Messages are permanently lost on timeout.
-
-## Quick Status Check
+## 1. Confirm the local runtime
 
 ```bash
-# 1. Is the service running?
-launchctl list | grep nanoclaw
-# Expected: PID  0  com.nanoclaw (PID = running, "-" = not running, non-zero exit = crashed)
-
-# 2. Any running containers?
-container ls --format '{{.Names}} {{.Status}}' 2>/dev/null | grep nanoclaw
-
-# 3. Any stopped/orphaned containers?
-container ls -a --format '{{.Names}} {{.Status}}' 2>/dev/null | grep nanoclaw
-
-# 4. Recent errors in service log?
-grep -E 'ERROR|WARN' logs/nanoclaw.log | tail -20
-
-# 5. Is WhatsApp connected? (look for last connection event)
-grep -E 'Connected to WhatsApp|Connection closed|connection.*close' logs/nanoclaw.log | tail -5
-
-# 6. Are groups loaded?
-grep 'groupCount' logs/nanoclaw.log | tail -3
+cd /Users/j.csandoval/OpenClaw/nanoclaw
+source "$HOME/.nvm/nvm.sh" && nvm use
+node -v
 ```
 
-## Session Transcript Branching
+NanoClaw expects Node 22.x. If `better-sqlite3` was built under another Node version, use:
 
 ```bash
-# Check for concurrent CLI processes in session debug logs
-ls -la data/sessions/<group>/.claude/debug/
-
-# Count unique SDK processes that handled messages
-# Each .txt file = one CLI subprocess. Multiple = concurrent queries.
-
-# Check parentUuid branching in transcript
-python3 -c "
-import json, sys
-lines = open('data/sessions/<group>/.claude/projects/-workspace-group/<session>.jsonl').read().strip().split('\n')
-for i, line in enumerate(lines):
-  try:
-    d = json.loads(line)
-    if d.get('type') == 'user' and d.get('message'):
-      parent = d.get('parentUuid', 'ROOT')[:8]
-      content = str(d['message'].get('content', ''))[:60]
-      print(f'L{i+1} parent={parent} {content}')
-  except: pass
-"
+npm run restart
 ```
 
-## Container Timeout Investigation
+## 2. Restart cleanly
 
 ```bash
-# Check for recent timeouts
-grep -E 'Container timeout|timed out' logs/nanoclaw.log | tail -10
+npm run restart
+```
 
-# Check container log files for the timed-out container
+If you only need to stop the current instance:
+
+```bash
+npm run stop
+```
+
+## 3. Check the main localhost services
+
+```bash
+lsof -nP -iTCP:8788 -sTCP:LISTEN
+lsof -nP -iTCP:8787 -sTCP:LISTEN
+lsof -nP -iTCP:3001 -sTCP:LISTEN
+```
+
+Typical meanings:
+
+- `8788`: operator UI
+- `8787`: local channel when enabled
+- `3001`: credential proxy
+
+## 4. Verify build state
+
+```bash
+npm run build
+npm --prefix container/agent-runner run build
+```
+
+If the UI looks stale after changes, rebuild and hard-refresh the browser.
+
+## 5. Check the local UAT channel
+
+State file:
+
+```text
+data/local-channel/server.json
+```
+
+Quick check:
+
+```bash
+cat data/local-channel/server.json
+```
+
+The file contains:
+
+- `baseUrl`
+- `authToken`
+- `inboundPath`
+- `outboxPath`
+
+Use that token for manual localhost UAT traffic.
+
+## 6. Check the operator UI
+
+Open:
+
+```text
+http://127.0.0.1:8788
+```
+
+Useful pages:
+
+- `/today`
+- `/inbox`
+- `/work`
+- `/review`
+- `/connections`
+- `/admin`
+- `/admin/legacy`
+
+If pages are not updating, first try a hard refresh. The UI is tokenized and cached more aggressively than the older server-rendered pages.
+
+## 7. Inspect container logs
+
+Per-group container logs are written under:
+
+```text
+groups/<group>/logs/container-*.log
+```
+
+Recent logs:
+
+```bash
 ls -lt groups/*/logs/container-*.log | head -10
+```
 
-# Read the most recent container log (replace path)
+Read one:
+
+```bash
 cat groups/<group>/logs/container-<timestamp>.log
-
-# Check if retries were scheduled and what happened
-grep -E 'Scheduling retry|retry|Max retries' logs/nanoclaw.log | tail -10
 ```
 
-## Agent Not Responding
+## 8. Inspect OpenAI session state
+
+Per-group session state lives under:
+
+```text
+data/sessions/<group>/openai/
+```
+
+Common files:
+
+- `current-transcript.jsonl`
+- `summary.md`
+
+Quick check:
 
 ```bash
-# Check if messages are being received from WhatsApp
-grep 'New messages' logs/nanoclaw.log | tail -10
-
-# Check if messages are being processed (container spawned)
-grep -E 'Processing messages|Spawning container' logs/nanoclaw.log | tail -10
-
-# Check if messages are being piped to active container
-grep -E 'Piped messages|sendMessage' logs/nanoclaw.log | tail -10
-
-# Check the queue state — any active containers?
-grep -E 'Starting container|Container active|concurrency limit' logs/nanoclaw.log | tail -10
-
-# Check lastAgentTimestamp vs latest message timestamp
-sqlite3 store/messages.db "SELECT chat_jid, MAX(timestamp) as latest FROM messages GROUP BY chat_jid ORDER BY latest DESC LIMIT 5;"
+ls -la data/sessions/<group>/openai
+tail -50 data/sessions/<group>/openai/current-transcript.jsonl
 ```
 
-## Container Mount Issues
+## 9. Inspect personal-ops state
+
+Host-only personal-ops store:
+
+- macOS: `~/Library/Application Support/NanoClaw/personal-ops/`
+- Linux: `~/.config/nanoclaw/personal-ops/`
+
+Repo-local normalized views:
+
+```text
+data/personal-ops/public/
+```
+
+Use `Connections`, `Today`, `Inbox`, and `Review` first, then inspect the host store directly only when you need the raw state.
+
+## 10. Typical failure patterns
+
+### Port already in use
+
+Symptom:
+
+- `EADDRINUSE` on `8788`, `8787`, or `3001`
+
+Fix:
 
 ```bash
-# Check mount validation logs (shows on container spawn)
-grep -E 'Mount validated|Mount.*REJECTED|mount' logs/nanoclaw.log | tail -10
-
-# Verify the mount allowlist is readable
-cat ~/.config/nanoclaw/mount-allowlist.json
-
-# Check group's container_config in DB
-sqlite3 store/messages.db "SELECT name, container_config FROM registered_groups;"
-
-# Test-run a container to check mounts (dry run)
-# Replace <group-folder> with the group's folder name
-container run -i --rm --entrypoint ls nanoclaw-agent:latest /workspace/extra/
+npm run stop
+npm run restart
 ```
 
-## WhatsApp Auth Issues
+### Wrong Node version / native module mismatch
+
+Symptom:
+
+- `better-sqlite3` `NODE_MODULE_VERSION` mismatch
+
+Fix:
 
 ```bash
-# Check if QR code was requested (means auth expired)
-grep 'QR\|authentication required\|qr' logs/nanoclaw.log | tail -5
-
-# Check auth files exist
-ls -la store/auth/
-
-# Re-authenticate if needed
-npm run auth
+source "$HOME/.nvm/nvm.sh" && nvm use
+npm run restart
 ```
 
-## Service Management
+### Operator UI actions return 403
 
-```bash
-# Restart the service
-launchctl kickstart -k gui/$(id -u)/com.nanoclaw
+Symptom:
 
-# View live logs
-tail -f logs/nanoclaw.log
+- action APIs fail with missing operator token
 
-# Stop the service (careful — running containers are detached, not killed)
-launchctl bootout gui/$(id -u)/com.nanoclaw
+Fix:
 
-# Start the service
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.nanoclaw.plist
+- reload the operator UI from NanoClaw directly
+- avoid using stale tabs or copied API requests without the injected session token
 
-# Rebuild after code changes
-npm run build && launchctl kickstart -k gui/$(id -u)/com.nanoclaw
-```
+### Local channel requests return 403
+
+Symptom:
+
+- `/inbound` or `/outbox` says a token is required
+
+Fix:
+
+- use the token from `data/local-channel/server.json`
+
+### Personal-ops data looks stale
+
+Fix:
+
+- use `Connections -> Sync now`
+- verify the relevant connection is healthy
+- check whether the change needs retroactive recomputation from corrected memory or source overrides

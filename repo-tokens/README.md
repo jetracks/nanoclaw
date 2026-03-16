@@ -20,7 +20,7 @@ A GitHub Action that calculates the size of your codebase in terms of tokens and
 
 This counts tokens using [tiktoken](https://github.com/openai/tiktoken) and writes the result between HTML comment markers in your README:
 
-The badge color reflects what percentage of an LLMs context window the codebase fills (context window size is configurable, defaults to 200k which is the size of Claude Opus). Green for under 30%, yellow-green for 30%-50%, yellow for 50%-70%, red for 70%+.
+The badge color reflects what percentage of a configurable agent context window the codebase fills. The default budget is `200000` tokens. Green is under 30%, yellow-green is 30%-50%, yellow is 50%-70%, and red is 70%+.
 
 ## Why
 

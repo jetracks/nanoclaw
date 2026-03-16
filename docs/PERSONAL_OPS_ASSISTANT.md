@@ -34,6 +34,82 @@ The product should help Jerry answer:
 - What should I say in my standup?
 - What did I actually get done this week?
 
+## Current Main Surfaces
+
+Primary daily surfaces:
+
+- `Today`: curated daily cockpit
+- `Inbox`: triage new inbound
+- `Work`: durable open loops and workstreams
+- `Review`: approvals, questions, memory, improvements, and noise controls
+
+Secondary support surfaces:
+
+- `Calendar`
+- `Reports`
+- `History`
+- `Connections`
+
+The intended usage model is:
+
+1. start with `Today`
+2. process new inbound in `Inbox`
+3. manage durable obligations in `Work`
+4. teach or approve the assistant in `Review`
+
+## Current Product Model
+
+### Attention model
+
+The assistant currently reasons about more than client/project attribution. It also tracks:
+
+- `awarenessOnly`
+- `actionRequired`
+- `operationalRisk`
+- `reportWorthy`
+- directness
+- importance reason
+- confidence
+- thread state
+
+This is what lets the assistant try to separate:
+
+- what needs action
+- what is important awareness
+- what is low signal noise
+
+### Open loops and workstreams
+
+The system derives durable work from source evidence across:
+
+- email
+- Slack
+- Jira
+- calendar
+- git/repos
+- manual notes and tasks
+
+It represents this as:
+
+- open loops
+- work items
+- workstreams
+
+Those are intentionally derived from raw evidence, so they can be recomputed when the assistant learns something new.
+
+### Review and approval
+
+The assistant does not just silently infer. It also creates:
+
+- queued approvals
+- review suggestions
+- memory facts
+- assistant questions
+- internal improvement tickets
+- noise-control rules such as ignore-similar-message patterns
+
+The goal is to keep human correction central while still letting the assistant get better over time.
+
 ## How It Should Think
 
 ### 1. Context-aware, not brittle
@@ -72,6 +148,7 @@ The assistant should surface why something was mapped or prioritized:
 - workspace or account match
 - Jira key match
 - repository alias
+- account-scoped contact hint
 - model-guided role/context judgment
 
 When uncertain, it should preserve ambiguity rather than pretend certainty.
@@ -85,12 +162,21 @@ Jerry must be able to teach the system through lightweight correction:
 - this is awareness only, not a task
 - this is high priority
 - this is blocked
+- ignore messages like this in the future
 
 Those corrections should remain more important than future inference.
 
 ## Main Context Layers
 
-The assistant currently has several places where operational context can live.
+### Operator profile
+
+The operator profile holds Jerry's global working context, such as:
+
+- work hours
+- role summary
+- escalation posture
+- reporting preferences
+- assistant style defaults
 
 ### Client context
 
@@ -128,7 +214,13 @@ Examples:
 
 ### Connection context
 
-Each connected account can store soft triage guidance.
+Each connected account can store:
+
+- default client
+- optional default project
+- client-only-by-default behavior
+- scope settings
+- soft triage guidance
 
 This is the right place for instructions like:
 
@@ -139,6 +231,19 @@ This is the right place for instructions like:
 - what kinds of situations should break through as high priority
 
 This is model context, not a deterministic filter.
+
+### Contacts and account-scoped hints
+
+The assistant currently maintains lightweight contacts, identities, and account-scoped hints.
+
+This matters especially for shared vendors and service senders such as:
+
+- AWS
+- Figma
+- monitoring systems
+- billing systems
+
+Those senders should not automatically harden into one global client/project mapping just because they appeared in one account. Account context should outrank global sender memory for email-derived learning.
 
 ### Repository context
 
@@ -151,58 +256,22 @@ They should help the assistant:
 - generate better standups and change summaries
 - estimate effort more credibly than email/calendar alone
 
-## Desired Behaviors
+## Current 2.6 Direction
 
-### Morning
-
-The assistant should produce a clear, low-noise morning view:
-
-- today's meetings
-- top priorities
-- follow-ups that actually require Jerry
-- blockers
-- active workstreams
-- draft standup
-
-### During the day
-
-The assistant should help triage new inbound and track work in motion:
-
-- distinguish awareness from action
-- link emails, Slack, Jira, and repo activity into the same workstream
-- surface things that slipped or changed
-- preserve client/project attribution
-
-### End of day
-
-The assistant should help Jerry close the loop:
-
-- what moved forward
-- what remains open
-- what is blocked
-- what should carry into tomorrow
-
-## Current Product Direction
-
-Today the system already supports:
+The current system supports:
 
 - Google, Microsoft, Jira, and Slack connections
 - client and project registry
-- client roles and notes
-- connection-level triage guidance
 - repository attachment and discovery
-- workstream grouping
+- workstream grouping and open-loop derivation
 - attribution diagnostics
-- morning, standup, and wrap reporting
-
-The current model-guided triage path uses:
-
-- source content
-- account identity
-- connection guidance
-- client roles and notes
-- communication preferences
-- project context
+- morning, standup, wrap, and report generation
+- assistant questions and in-UI coaching
+- review queues and approvals
+- durable memory facts
+- internal improvement tickets
+- noise controls such as ignore-similar-message patterns
+- retroactive recomputation when corrections or learned state change
 
 This is the right direction because it lets the assistant behave more intelligently without hardcoding every edge case.
 
@@ -217,6 +286,7 @@ That means:
 - better grouping of related work across email, Slack, Jira, meetings, and code
 - better prioritization based on Jerry's actual role in a client relationship
 - fewer low-value follow-up tasks
+- fewer repeated questions after the same ambiguity has been answered
 
 It does not mean silent autonomy or unreviewed action-taking.
 
@@ -227,46 +297,8 @@ When extending personal-ops behavior, prefer:
 - soft model context before hard rules
 - explainability before cleverness
 - correction loops before automation
+- account-aware email learning before global sender assumptions
 - workstream synthesis before adding more raw feeds
 - lower noise before higher volume
 
 The assistant should become more accurate and more useful without becoming more intrusive.
-
-## Examples Of Good Assistant Judgments
-
-### Betty Mills
-
-If a message lands in a shared alias mailbox and Jerry is not directly addressed, it is often awareness-only.
-
-But the assistant should still escalate if the content suggests:
-
-- vendor pricing changes
-- MAP violations
-- website or system outages
-- company-level operational risk
-
-### Dynecom
-
-The assistant should understand that Dynecom work often spans platform, client delivery, Jira, Slack, and multiple repositories. It should not treat those as unrelated simply because they arrive through different systems.
-
-### Subclients
-
-The assistant should preserve parent-child relationships:
-
-- `Ezidia` is under `Dynecom`
-- `TagSmart` and `Jameco` are prospects under `Dynecom`
-
-That should help planning and reporting reflect the real business structure.
-
-## Practical Maintenance Guidance
-
-To keep the assistant useful:
-
-- keep client roles current
-- add or refine client notes when a relationship changes
-- add connection triage guidance when an account has special semantics
-- attach active repositories to projects
-- correct bad mappings quickly
-- keep project status and priorities realistic
-
-The assistant should not depend on perfect data entry, but it becomes materially better when the registry and connection guidance stay current.

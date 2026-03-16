@@ -188,8 +188,9 @@ function registerGroup(jid: string, group: RegisteredGroup): void {
   registeredGroups[jid] = group;
   setRegisteredGroup(jid, group);
 
-  // Create group folder
-  fs.mkdirSync(path.join(groupDir, 'logs'), { recursive: true });
+  fs.mkdirSync(path.join(DATA_DIR, 'host-logs', group.folder), {
+    recursive: true,
+  });
 
   logger.info(
     { jid, name: group.name, folder: group.folder },

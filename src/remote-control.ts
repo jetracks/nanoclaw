@@ -6,6 +6,7 @@ import path from 'path';
 
 import { DATA_DIR, REMOTE_CONTROL_PORT } from './config.js';
 import { logger } from './logger.js';
+import { isAllowedLoopbackHost } from './network-security.js';
 import { formatTranscript } from './transcript-view.js';
 
 interface RemoteControlSession {
@@ -211,6 +212,11 @@ async function handleRequest(
   res: ServerResponse,
 ): Promise<void> {
   const url = new URL(req.url || '/', 'http://127.0.0.1');
+  if (!isAllowedLoopbackHost(req.headers.host, ['127.0.0.1'])) {
+    res.statusCode = 400;
+    res.end('Invalid Host header');
+    return;
+  }
   const parts = url.pathname.split('/').filter(Boolean);
 
   if (parts[0] === 'remote-control' && parts[1] && req.method === 'GET') {
