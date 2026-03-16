@@ -3,6 +3,7 @@
  * Spawns agent execution in containers and handles IPC
  */
 import { ChildProcess, exec, spawn } from 'child_process';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
@@ -14,20 +15,24 @@ import {
   DATA_DIR,
   GROUPS_DIR,
   IDLE_TIMEOUT,
+  OPENAI_MODEL,
+  OPENAI_REASONING_EFFORT,
   TIMEZONE,
 } from './config.js';
+import { getCredentialProxyAuthToken } from './credential-proxy.js';
 import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
 import { logger } from './logger.js';
 import {
-  CONTAINER_HOST_GATEWAY,
-  CONTAINER_RUNTIME_BIN,
+  containerHostGateway,
+  containerRuntimeBinary,
+  CONTAINER_RUNTIME,
   hostGatewayArgs,
-  readonlyMountArgs,
+  mountArgs,
+  runtimeSupportsUserMapping,
   stopContainer,
 } from './container-runtime.js';
-import { detectAuthMode } from './credential-proxy.js';
 import { validateAdditionalMounts } from './mount-security.js';
-import { RegisteredGroup } from './types.js';
+import { OpenAISessionState, RegisteredGroup } from './types.js';
 
 // Sentinel markers for robust output parsing (must match agent-runner)
 const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
@@ -35,7 +40,7 @@ const OUTPUT_END_MARKER = '---NANOCLAW_OUTPUT_END---';
 
 export interface ContainerInput {
   prompt: string;
-  sessionId?: string;
+  session?: OpenAISessionState;
   groupFolder: string;
   chatJid: string;
   isMain: boolean;
@@ -46,7 +51,7 @@ export interface ContainerInput {
 export interface ContainerOutput {
   status: 'success' | 'error';
   result: string | null;
-  newSessionId?: string;
+  newSessionState?: OpenAISessionState;
   error?: string;
 }
 
@@ -54,6 +59,86 @@ interface VolumeMount {
   hostPath: string;
   containerPath: string;
   readonly: boolean;
+}
+
+const AGENT_RUNNER_SYNC_METADATA = '.nanoclaw-sync.json';
+
+function hashDirectory(dir: string): string {
+  const hash = crypto.createHash('sha256');
+
+  const visit = (currentDir: string, relativeDir = ''): void => {
+    const entries = fs
+      .readdirSync(currentDir, { withFileTypes: true })
+      .filter((entry) => entry.name !== AGENT_RUNNER_SYNC_METADATA)
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    for (const entry of entries) {
+      const relativePath = path.join(relativeDir, entry.name);
+      hash.update(relativePath);
+      if (entry.isDirectory()) {
+        visit(path.join(currentDir, entry.name), relativePath);
+        continue;
+      }
+      hash.update(fs.readFileSync(path.join(currentDir, entry.name)));
+    }
+  };
+
+  visit(dir);
+  return hash.digest('hex');
+}
+
+function syncAgentRunnerSource(
+  agentRunnerSrc: string,
+  groupAgentRunnerDir: string,
+  groupName: string,
+): void {
+  const metadataPath = path.join(groupAgentRunnerDir, AGENT_RUNNER_SYNC_METADATA);
+  const sourceHash = hashDirectory(agentRunnerSrc);
+
+  if (!fs.existsSync(groupAgentRunnerDir)) {
+    fs.cpSync(agentRunnerSrc, groupAgentRunnerDir, { recursive: true });
+    fs.writeFileSync(metadataPath, JSON.stringify({ sourceHash }, null, 2));
+    return;
+  }
+
+  let storedHash: string | undefined;
+  if (fs.existsSync(metadataPath)) {
+    try {
+      storedHash = JSON.parse(fs.readFileSync(metadataPath, 'utf-8')).sourceHash;
+    } catch {
+      storedHash = undefined;
+    }
+  }
+
+  if (!storedHash) {
+    const backupDir = `${groupAgentRunnerDir}.backup-${Date.now()}`;
+    fs.renameSync(groupAgentRunnerDir, backupDir);
+    fs.cpSync(agentRunnerSrc, groupAgentRunnerDir, { recursive: true });
+    fs.writeFileSync(metadataPath, JSON.stringify({ sourceHash }, null, 2));
+    logger.warn(
+      { group: groupName, backupDir },
+      'Refreshed legacy per-group agent-runner source cache and preserved backup',
+    );
+    return;
+  }
+
+  const currentGroupHash = hashDirectory(groupAgentRunnerDir);
+  if (currentGroupHash !== storedHash) {
+    logger.info(
+      { group: groupName },
+      'Preserving customized per-group agent-runner source cache',
+    );
+    return;
+  }
+
+  if (storedHash === sourceHash) {
+    return;
+  }
+
+  fs.rmSync(groupAgentRunnerDir, { recursive: true, force: true });
+  fs.cpSync(agentRunnerSrc, groupAgentRunnerDir, { recursive: true });
+  fs.writeFileSync(metadataPath, JSON.stringify({ sourceHash }, null, 2));
+  logger.info({ group: groupName }, 'Updated per-group agent-runner source cache');
 }
 
 function buildVolumeMounts(
@@ -66,7 +151,7 @@ function buildVolumeMounts(
 
   if (isMain) {
     // Main gets the project root read-only. Writable paths the agent needs
-    // (group folder, IPC, .claude/) are mounted separately below.
+    // (group folder, IPC, session state) are mounted separately below.
     // Read-only prevents the agent from modifying host application code
     // (src/, dist/, package.json, etc.) which would bypass the sandbox
     // entirely on next restart.
@@ -100,66 +185,26 @@ function buildVolumeMounts(
       containerPath: '/workspace/group',
       readonly: false,
     });
-
-    // Global memory directory (read-only for non-main)
-    // Only directory mounts are supported, not file mounts
-    const globalDir = path.join(GROUPS_DIR, 'global');
-    if (fs.existsSync(globalDir)) {
-      mounts.push({
-        hostPath: globalDir,
-        containerPath: '/workspace/global',
-        readonly: true,
-      });
-    }
   }
 
-  // Per-group Claude sessions directory (isolated from other groups)
-  // Each group gets their own .claude/ to prevent cross-group session access
-  const groupSessionsDir = path.join(
-    DATA_DIR,
-    'sessions',
-    group.folder,
-    '.claude',
-  );
+  // Shared global memory directory.
+  // Main gets read-write access for explicit "remember this globally" workflows;
+  // non-main groups get read-only access.
+  const globalDir = path.join(GROUPS_DIR, 'global');
+  if (fs.existsSync(globalDir)) {
+    mounts.push({
+      hostPath: globalDir,
+      containerPath: '/workspace/global',
+      readonly: !isMain,
+    });
+  }
+
+  // Per-group session directory (isolated from other groups)
+  const groupSessionsDir = path.join(DATA_DIR, 'sessions', group.folder);
   fs.mkdirSync(groupSessionsDir, { recursive: true });
-  const settingsFile = path.join(groupSessionsDir, 'settings.json');
-  if (!fs.existsSync(settingsFile)) {
-    fs.writeFileSync(
-      settingsFile,
-      JSON.stringify(
-        {
-          env: {
-            // Enable agent swarms (subagent orchestration)
-            // https://code.claude.com/docs/en/agent-teams#orchestrate-teams-of-claude-code-sessions
-            CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
-            // Load CLAUDE.md from additional mounted directories
-            // https://code.claude.com/docs/en/memory#load-memory-from-additional-directories
-            CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: '1',
-            // Enable Claude's memory feature (persists user preferences between sessions)
-            // https://code.claude.com/docs/en/memory#manage-auto-memory
-            CLAUDE_CODE_DISABLE_AUTO_MEMORY: '0',
-          },
-        },
-        null,
-        2,
-      ) + '\n',
-    );
-  }
-
-  // Sync skills from container/skills/ into each group's .claude/skills/
-  const skillsSrc = path.join(process.cwd(), 'container', 'skills');
-  const skillsDst = path.join(groupSessionsDir, 'skills');
-  if (fs.existsSync(skillsSrc)) {
-    for (const skillDir of fs.readdirSync(skillsSrc)) {
-      const srcDir = path.join(skillsSrc, skillDir);
-      if (!fs.statSync(srcDir).isDirectory()) continue;
-      const dstDir = path.join(skillsDst, skillDir);
-      fs.cpSync(srcDir, dstDir, { recursive: true });
-    }
-  }
   mounts.push({
     hostPath: groupSessionsDir,
-    containerPath: '/home/node/.claude',
+    containerPath: '/workspace/session',
     readonly: false,
   });
 
@@ -190,8 +235,8 @@ function buildVolumeMounts(
     group.folder,
     'agent-runner-src',
   );
-  if (!fs.existsSync(groupAgentRunnerDir) && fs.existsSync(agentRunnerSrc)) {
-    fs.cpSync(agentRunnerSrc, groupAgentRunnerDir, { recursive: true });
+  if (fs.existsSync(agentRunnerSrc)) {
+    syncAgentRunnerSource(agentRunnerSrc, groupAgentRunnerDir, group.name);
   }
   mounts.push({
     hostPath: groupAgentRunnerDir,
@@ -212,51 +257,47 @@ function buildVolumeMounts(
   return mounts;
 }
 
-function buildContainerArgs(
+export function buildContainerArgs(
   mounts: VolumeMount[],
   containerName: string,
+  runtime = CONTAINER_RUNTIME,
 ): string[] {
   const args: string[] = ['run', '-i', '--rm', '--name', containerName];
 
   // Pass host timezone so container's local time matches the user's
-  args.push('-e', `TZ=${TIMEZONE}`);
+  args.push('--env', `TZ=${TIMEZONE}`);
+  args.push('--env', 'NODE_OPTIONS=--dns-result-order=ipv4first');
 
   // Route API traffic through the credential proxy (containers never see real secrets)
   args.push(
-    '-e',
-    `ANTHROPIC_BASE_URL=http://${CONTAINER_HOST_GATEWAY}:${CREDENTIAL_PROXY_PORT}`,
+    '--env',
+    `OPENAI_BASE_URL=http://${containerHostGateway(runtime)}:${CREDENTIAL_PROXY_PORT}/v1`,
   );
-
-  // Mirror the host's auth method with a placeholder value.
-  // API key mode: SDK sends x-api-key, proxy replaces with real key.
-  // OAuth mode:   SDK exchanges placeholder token for temp API key,
-  //               proxy injects real OAuth token on that exchange request.
-  const authMode = detectAuthMode();
-  if (authMode === 'api-key') {
-    args.push('-e', 'ANTHROPIC_API_KEY=placeholder');
-  } else {
-    args.push('-e', 'CLAUDE_CODE_OAUTH_TOKEN=placeholder');
-  }
+  args.push('--env', 'OPENAI_API_KEY=placeholder');
+  args.push('--env', `NANOCLAW_PROXY_TOKEN=${getCredentialProxyAuthToken()}`);
+  args.push('--env', `OPENAI_MODEL=${OPENAI_MODEL}`);
+  args.push('--env', `OPENAI_REASONING_EFFORT=${OPENAI_REASONING_EFFORT}`);
 
   // Runtime-specific args for host gateway resolution
-  args.push(...hostGatewayArgs());
+  args.push(...hostGatewayArgs(runtime));
 
   // Run as host user so bind-mounted files are accessible.
   // Skip when running as root (uid 0), as the container's node user (uid 1000),
   // or when getuid is unavailable (native Windows without WSL).
   const hostUid = process.getuid?.();
   const hostGid = process.getgid?.();
-  if (hostUid != null && hostUid !== 0 && hostUid !== 1000) {
+  if (
+    runtimeSupportsUserMapping(runtime) &&
+    hostUid != null &&
+    hostUid !== 0 &&
+    hostUid !== 1000
+  ) {
     args.push('--user', `${hostUid}:${hostGid}`);
-    args.push('-e', 'HOME=/home/node');
+    args.push('--env', 'HOME=/home/node');
   }
 
   for (const mount of mounts) {
-    if (mount.readonly) {
-      args.push(...readonlyMountArgs(mount.hostPath, mount.containerPath));
-    } else {
-      args.push('-v', `${mount.hostPath}:${mount.containerPath}`);
-    }
+    args.push(...mountArgs(mount.hostPath, mount.containerPath, mount.readonly, runtime));
   }
 
   args.push(CONTAINER_IMAGE);
@@ -278,7 +319,7 @@ export async function runContainerAgent(
   const mounts = buildVolumeMounts(group, input.isMain);
   const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
   const containerName = `nanoclaw-${safeName}-${Date.now()}`;
-  const containerArgs = buildContainerArgs(mounts, containerName);
+  const containerArgs = buildContainerArgs(mounts, containerName, CONTAINER_RUNTIME);
 
   logger.debug(
     {
@@ -307,7 +348,7 @@ export async function runContainerAgent(
   fs.mkdirSync(logsDir, { recursive: true });
 
   return new Promise((resolve) => {
-    const container = spawn(CONTAINER_RUNTIME_BIN, containerArgs, {
+    const container = spawn(containerRuntimeBinary(CONTAINER_RUNTIME), containerArgs, {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
@@ -323,7 +364,7 @@ export async function runContainerAgent(
 
     // Streaming output: parse OUTPUT_START/END marker pairs as they arrive
     let parseBuffer = '';
-    let newSessionId: string | undefined;
+    let newSessionState: OpenAISessionState | undefined;
     let outputChain = Promise.resolve();
 
     container.stdout.on('data', (data) => {
@@ -359,8 +400,8 @@ export async function runContainerAgent(
 
           try {
             const parsed: ContainerOutput = JSON.parse(jsonStr);
-            if (parsed.newSessionId) {
-              newSessionId = parsed.newSessionId;
+            if (parsed.newSessionState) {
+              newSessionState = parsed.newSessionState;
             }
             hadStreamingOutput = true;
             // Activity detected — reset the hard timeout
@@ -413,7 +454,7 @@ export async function runContainerAgent(
         { group: group.name, containerName },
         'Container timeout, stopping gracefully',
       );
-      exec(stopContainer(containerName), { timeout: 15000 }, (err) => {
+      exec(stopContainer(containerName, CONTAINER_RUNTIME), { timeout: 15000 }, (err) => {
         if (err) {
           logger.warn(
             { group: group.name, containerName, err },
@@ -464,7 +505,7 @@ export async function runContainerAgent(
             resolve({
               status: 'success',
               result: null,
-              newSessionId,
+              newSessionState,
             });
           });
           return;
@@ -528,7 +569,7 @@ export async function runContainerAgent(
         logLines.push(
           `=== Input Summary ===`,
           `Prompt length: ${input.prompt.length} chars`,
-          `Session ID: ${input.sessionId || 'new'}`,
+          `Previous response: ${input.session?.previousResponseId || 'new'}`,
           ``,
           `=== Mounts ===`,
           mounts
@@ -566,13 +607,13 @@ export async function runContainerAgent(
       if (onOutput) {
         outputChain.then(() => {
           logger.info(
-            { group: group.name, duration, newSessionId },
+            { group: group.name, duration, newSessionState },
             'Container completed (streaming mode)',
           );
           resolve({
             status: 'success',
             result: null,
-            newSessionId,
+            newSessionState,
           });
         });
         return;

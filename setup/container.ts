@@ -3,6 +3,7 @@
  * Replaces 03-setup-container.sh
  */
 import { execSync } from 'child_process';
+import fs from 'fs';
 import path from 'path';
 
 import { logger } from '../src/logger.js';
@@ -18,6 +19,28 @@ function parseArgs(args: string[]): { runtime: string } {
     }
   }
   return { runtime };
+}
+
+function persistContainerRuntime(projectRoot: string, runtime: string): void {
+  const envFile = path.join(projectRoot, '.env');
+  let envContent = '';
+  if (fs.existsSync(envFile)) {
+    envContent = fs.readFileSync(envFile, 'utf-8');
+  }
+
+  if (/^CONTAINER_RUNTIME=/m.test(envContent)) {
+    envContent = envContent.replace(
+      /^CONTAINER_RUNTIME=.*$/m,
+      `CONTAINER_RUNTIME=${runtime}`,
+    );
+  } else {
+    envContent = envContent.trimEnd();
+    envContent = envContent
+      ? `${envContent}\nCONTAINER_RUNTIME=${runtime}\n`
+      : `CONTAINER_RUNTIME=${runtime}\n`;
+  }
+
+  fs.writeFileSync(envFile, envContent);
 }
 
 export async function run(args: string[]): Promise<void> {
@@ -130,6 +153,10 @@ export async function run(args: string[]): Promise<void> {
   }
 
   const status = buildOk && testOk ? 'success' : 'failed';
+
+  if (status === 'success') {
+    persistContainerRuntime(projectRoot, runtime);
+  }
 
   emitStatus('SETUP_CONTAINER', {
     RUNTIME: runtime,

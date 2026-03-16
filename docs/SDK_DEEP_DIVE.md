@@ -1,3 +1,5 @@
+> Historical note: this reverse-engineering document covers the removed Claude SDK runtime and is no longer the active NanoClaw architecture.
+
 # Claude Agent SDK Deep Dive
 
 Findings from reverse-engineering `@anthropic-ai/claude-agent-sdk` v0.2.29–0.2.34 to understand how `query()` works, why agent teams subagents were being killed, and how to fix it. Supplemented with official SDK reference docs.

@@ -12,6 +12,10 @@ import path from 'path';
 import Database from 'better-sqlite3';
 
 import { STORE_DIR } from '../src/config.js';
+import {
+  normalizeContainerRuntime,
+  runtimeHealthcheckCommand,
+} from '../src/container-runtime.js';
 import { readEnvFile } from '../src/env.js';
 import { logger } from '../src/logger.js';
 import {
@@ -83,31 +87,41 @@ export async function run(_args: string[]): Promise<void> {
   logger.info({ service }, 'Service status');
 
   // 2. Check container runtime
+  const runtimeEnv = readEnvFile(['CONTAINER_RUNTIME']);
+  const configuredRuntime = normalizeContainerRuntime(
+    process.env.CONTAINER_RUNTIME || runtimeEnv.CONTAINER_RUNTIME,
+  );
   let containerRuntime = 'none';
   try {
-    execSync('command -v container', { stdio: 'ignore' });
-    containerRuntime = 'apple-container';
+    execSync(runtimeHealthcheckCommand(configuredRuntime), { stdio: 'ignore' });
+    containerRuntime = configuredRuntime;
   } catch {
-    try {
-      execSync('docker info', { stdio: 'ignore' });
-      containerRuntime = 'docker';
-    } catch {
-      // No runtime
-    }
+    // Selected runtime unavailable
   }
 
   // 3. Check credentials
   let credentials = 'missing';
+  let credentialsError = '';
   const envFile = path.join(projectRoot, '.env');
   if (fs.existsSync(envFile)) {
     const envContent = fs.readFileSync(envFile, 'utf-8');
-    if (/^(CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_API_KEY)=/m.test(envContent)) {
+    const hasOpenAI = /^OPENAI_API_KEY=/m.test(envContent);
+    const hasLegacyAnthropic =
+      /^(CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_API_KEY|ANTHROPIC_BASE_URL|ANTHROPIC_AUTH_TOKEN)=/m.test(
+        envContent,
+      );
+    if (hasOpenAI) {
       credentials = 'configured';
+    } else if (hasLegacyAnthropic) {
+      credentials = 'legacy_anthropic_config';
+      credentialsError =
+        'Anthropic-only configuration detected. Set OPENAI_API_KEY and migrate any optional OPENAI_* variables.';
     }
   }
 
   // 4. Check channel auth (detect configured channels by credentials)
   const envVars = readEnvFile([
+    'LOCAL_CHANNEL_ENABLED',
     'TELEGRAM_BOT_TOKEN',
     'SLACK_BOT_TOKEN',
     'SLACK_APP_TOKEN',
@@ -120,6 +134,13 @@ export async function run(_args: string[]): Promise<void> {
   const authDir = path.join(projectRoot, 'store', 'auth');
   if (fs.existsSync(authDir) && fs.readdirSync(authDir).length > 0) {
     channelAuth.whatsapp = 'authenticated';
+  }
+
+  if (
+    (process.env.LOCAL_CHANNEL_ENABLED || envVars.LOCAL_CHANNEL_ENABLED) ===
+    'true'
+  ) {
+    channelAuth.local = 'configured';
   }
 
   // Token-based channels: check .env
@@ -168,7 +189,8 @@ export async function run(_args: string[]): Promise<void> {
   // Determine overall status
   const status =
     service === 'running' &&
-    credentials !== 'missing' &&
+    containerRuntime === configuredRuntime &&
+    credentials === 'configured' &&
     anyChannelConfigured &&
     registeredGroups > 0
       ? 'success'
@@ -178,6 +200,7 @@ export async function run(_args: string[]): Promise<void> {
 
   emitStatus('VERIFY', {
     SERVICE: service,
+    CONFIGURED_CONTAINER_RUNTIME: configuredRuntime,
     CONTAINER_RUNTIME: containerRuntime,
     CREDENTIALS: credentials,
     CONFIGURED_CHANNELS: configuredChannels.join(','),
@@ -185,6 +208,7 @@ export async function run(_args: string[]): Promise<void> {
     REGISTERED_GROUPS: registeredGroups,
     MOUNT_ALLOWLIST: mountAllowlist,
     STATUS: status,
+    ERROR: credentialsError,
     LOG: 'logs/setup.log',
   });
 

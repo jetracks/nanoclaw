@@ -6,7 +6,12 @@ import { ASSISTANT_NAME, DATA_DIR, STORE_DIR } from './config.js';
 import { isValidGroupFolder } from './group-folder.js';
 import { logger } from './logger.js';
 import {
+  normalizeSessionState,
+  serializeSessionState,
+} from './session-state.js';
+import {
   NewMessage,
+  OpenAISessionState,
   RegisteredGroup,
   ScheduledTask,
   TaskRunLog,
@@ -363,6 +368,44 @@ export function getMessagesSince(
     .all(chatJid, sinceTimestamp, `${botPrefix}:%`, limit) as NewMessage[];
 }
 
+export function getRecentMessages(
+  chatJid: string,
+  botPrefix: string,
+  limit: number = 100,
+): NewMessage[] {
+  const sql = `
+    SELECT * FROM (
+      SELECT id, chat_jid, sender, sender_name, content, timestamp, is_from_me
+      FROM messages
+      WHERE chat_jid = ?
+        AND is_bot_message = 0 AND content NOT LIKE ?
+        AND content != '' AND content IS NOT NULL
+      ORDER BY timestamp DESC
+      LIMIT ?
+    ) ORDER BY timestamp
+  `;
+
+  return db.prepare(sql).all(chatJid, `${botPrefix}:%`, limit) as NewMessage[];
+}
+
+export function getRecentConversationMessages(
+  chatJid: string,
+  limit: number = 120,
+): NewMessage[] {
+  const sql = `
+    SELECT * FROM (
+      SELECT id, chat_jid, sender, sender_name, content, timestamp, is_from_me, is_bot_message
+      FROM messages
+      WHERE chat_jid = ?
+        AND content != '' AND content IS NOT NULL
+      ORDER BY timestamp DESC
+      LIMIT ?
+    ) ORDER BY timestamp
+  `;
+
+  return db.prepare(sql).all(chatJid, limit) as NewMessage[];
+}
+
 export function createTask(
   task: Omit<ScheduledTask, 'last_run' | 'last_result'>,
 ): void {
@@ -410,7 +453,12 @@ export function updateTask(
   updates: Partial<
     Pick<
       ScheduledTask,
-      'prompt' | 'schedule_type' | 'schedule_value' | 'next_run' | 'status'
+      | 'prompt'
+      | 'schedule_type'
+      | 'schedule_value'
+      | 'context_mode'
+      | 'next_run'
+      | 'status'
     >
   >,
 ): void {
@@ -428,6 +476,10 @@ export function updateTask(
   if (updates.schedule_value !== undefined) {
     fields.push('schedule_value = ?');
     values.push(updates.schedule_value);
+  }
+  if (updates.context_mode !== undefined) {
+    fields.push('context_mode = ?');
+    values.push(updates.context_mode);
   }
   if (updates.next_run !== undefined) {
     fields.push('next_run = ?');
@@ -496,6 +548,23 @@ export function logTaskRun(log: TaskRunLog): void {
   );
 }
 
+export function getTaskRunLogs(
+  taskId: string,
+  limit: number = 20,
+): TaskRunLog[] {
+  return db
+    .prepare(
+      `
+      SELECT task_id, run_at, duration_ms, status, result, error
+      FROM task_run_logs
+      WHERE task_id = ?
+      ORDER BY run_at DESC
+      LIMIT ?
+    `,
+    )
+    .all(taskId, limit) as TaskRunLog[];
+}
+
 // --- Router state accessors ---
 
 export function getRouterState(key: string): string | undefined {
@@ -513,26 +582,36 @@ export function setRouterState(key: string, value: string): void {
 
 // --- Session accessors ---
 
-export function getSession(groupFolder: string): string | undefined {
+export function getSession(
+  groupFolder: string,
+): OpenAISessionState | undefined {
   const row = db
     .prepare('SELECT session_id FROM sessions WHERE group_folder = ?')
     .get(groupFolder) as { session_id: string } | undefined;
-  return row?.session_id;
+  return normalizeSessionState(row?.session_id);
 }
 
-export function setSession(groupFolder: string, sessionId: string): void {
+export function setSession(
+  groupFolder: string,
+  sessionState: OpenAISessionState,
+): void {
+  const serialized = serializeSessionState(sessionState);
+  if (!serialized) return;
   db.prepare(
     'INSERT OR REPLACE INTO sessions (group_folder, session_id) VALUES (?, ?)',
-  ).run(groupFolder, sessionId);
+  ).run(groupFolder, serialized);
 }
 
-export function getAllSessions(): Record<string, string> {
+export function getAllSessions(): Record<string, OpenAISessionState> {
   const rows = db
     .prepare('SELECT group_folder, session_id FROM sessions')
     .all() as Array<{ group_folder: string; session_id: string }>;
-  const result: Record<string, string> = {};
+  const result: Record<string, OpenAISessionState> = {};
   for (const row of rows) {
-    result[row.group_folder] = row.session_id;
+    const normalized = normalizeSessionState(row.session_id);
+    if (normalized) {
+      result[row.group_folder] = normalized;
+    }
   }
   return result;
 }
@@ -667,13 +746,13 @@ function migrateJsonState(): void {
   }
 
   // Migrate sessions.json
-  const sessions = migrateFile('sessions.json') as Record<
-    string,
-    string
-  > | null;
+  const sessions = migrateFile('sessions.json') as Record<string, string> | null;
   if (sessions) {
     for (const [folder, sessionId] of Object.entries(sessions)) {
-      setSession(folder, sessionId);
+      const normalized = normalizeSessionState(sessionId);
+      if (normalized) {
+        setSession(folder, normalized);
+      }
     }
   }
 

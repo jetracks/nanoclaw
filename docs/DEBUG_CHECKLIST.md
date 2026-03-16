@@ -1,3 +1,5 @@
+> Historical note: this checklist was written against the removed Claude runtime and is kept only for migration context. Prefer `README.md`, `AGENTS.md`, and current runtime code for the active OpenAI system.
+
 # NanoClaw Debug Checklist
 
 ## Known Issues (2026-02-08)

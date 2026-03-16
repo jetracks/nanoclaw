@@ -213,13 +213,23 @@ describe('parameterized SQL registration', () => {
 });
 
 describe('file templating', () => {
-  it('replaces assistant name in CLAUDE.md content', () => {
+  it('replaces assistant name in AGENTS.md content', () => {
     let content = '# Andy\n\nYou are Andy, a personal assistant.';
 
     content = content.replace(/^# Andy$/m, '# Nova');
     content = content.replace(/You are Andy/g, 'You are Nova');
 
     expect(content).toBe('# Nova\n\nYou are Nova, a personal assistant.');
+  });
+
+  it('keeps legacy CLAUDE.md compatibility for name replacement', () => {
+    let content = '# Andy\n\nYou are Andy.';
+
+    content = content.replace(/^# Andy$/m, '# Nova');
+    content = content.replace(/You are Andy/g, 'You are Nova');
+
+    expect(content).toContain('# Nova');
+    expect(content).toContain('You are Nova.');
   });
 
   it('handles names with special regex characters', () => {

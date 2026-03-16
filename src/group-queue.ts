@@ -27,6 +27,15 @@ interface GroupState {
   retryCount: number;
 }
 
+export interface InspectableGroupState {
+  groupJid: string;
+  active: boolean;
+  idleWaiting: boolean;
+  isTaskContainer: boolean;
+  groupFolder: string | null;
+  containerName: string | null;
+}
+
 export class GroupQueue {
   private groups = new Map<string, GroupState>();
   private activeCount = 0;
@@ -191,6 +200,17 @@ export class GroupQueue {
     } catch {
       // ignore
     }
+  }
+
+  getInspectableStates(): InspectableGroupState[] {
+    return Array.from(this.groups.entries()).map(([groupJid, state]) => ({
+      groupJid,
+      active: state.active,
+      idleWaiting: state.idleWaiting,
+      isTaskContainer: state.isTaskContainer,
+      groupFolder: state.groupFolder,
+      containerName: state.containerName,
+    }));
   }
 
   private async runForGroup(

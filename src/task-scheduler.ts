@@ -19,7 +19,11 @@ import {
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { logger } from './logger.js';
-import { RegisteredGroup, ScheduledTask } from './types.js';
+import {
+  OpenAISessionState,
+  RegisteredGroup,
+  ScheduledTask,
+} from './types.js';
 
 /**
  * Compute the next run time for a recurring task, anchored to the
@@ -64,7 +68,7 @@ export function computeNextRun(task: ScheduledTask): string | null {
 
 export interface SchedulerDependencies {
   registeredGroups: () => Record<string, RegisteredGroup>;
-  getSessions: () => Record<string, string>;
+  getSessions: () => Record<string, OpenAISessionState>;
   queue: GroupQueue;
   onProcess: (
     groupJid: string,
@@ -151,7 +155,7 @@ async function runTask(
 
   // For group context mode, use the group's current session
   const sessions = deps.getSessions();
-  const sessionId =
+  const session =
     task.context_mode === 'group' ? sessions[task.group_folder] : undefined;
 
   // After the task produces a result, close the container promptly.
@@ -173,7 +177,7 @@ async function runTask(
       group,
       {
         prompt: task.prompt,
-        sessionId,
+        session,
         groupFolder: task.group_folder,
         chatJid: task.chat_jid,
         isMain,

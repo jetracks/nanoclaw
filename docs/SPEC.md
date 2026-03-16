@@ -1,3 +1,5 @@
+> Historical note: this document describes the pre-OpenAI Claude-era architecture and is kept only for migration context. Follow `README.md`, `AGENTS.md`, and current runtime code instead.
+
 # NanoClaw Specification
 
 A personal Claude assistant with multi-channel support, persistent memory per conversation, scheduled tasks, and container-isolated agent execution.

@@ -11,7 +11,10 @@ vi.mock('./logger.js', () => ({
   logger: { info: vi.fn(), error: vi.fn(), debug: vi.fn(), warn: vi.fn() },
 }));
 
-import { startCredentialProxy } from './credential-proxy.js';
+import {
+  getCredentialProxyAuthToken,
+  startCredentialProxy,
+} from './credential-proxy.js';
 
 function makeRequest(
   port: number,
@@ -49,12 +52,14 @@ describe('credential-proxy', () => {
   let proxyPort: number;
   let upstreamPort: number;
   let lastUpstreamHeaders: http.IncomingHttpHeaders;
+  let lastUpstreamUrl = '';
 
   beforeEach(async () => {
     lastUpstreamHeaders = {};
 
     upstreamServer = http.createServer((req, res) => {
       lastUpstreamHeaders = { ...req.headers };
+      lastUpstreamUrl = req.url || '';
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ ok: true }));
     });
@@ -72,90 +77,121 @@ describe('credential-proxy', () => {
 
   async function startProxy(env: Record<string, string>): Promise<number> {
     Object.assign(mockEnv, env, {
-      ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstreamPort}`,
+      OPENAI_BASE_URL: `http://127.0.0.1:${upstreamPort}/v1`,
     });
     proxyServer = await startCredentialProxy(0);
     return (proxyServer.address() as AddressInfo).port;
   }
 
-  it('API-key mode injects x-api-key and strips placeholder', async () => {
-    proxyPort = await startProxy({ ANTHROPIC_API_KEY: 'sk-ant-real-key' });
+  it('injects Authorization and strips placeholder credentials', async () => {
+    proxyPort = await startProxy({ OPENAI_API_KEY: 'sk-openai-real-key' });
 
     await makeRequest(
       proxyPort,
       {
         method: 'POST',
-        path: '/v1/messages',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key': 'placeholder',
-        },
-      },
-      '{}',
-    );
-
-    expect(lastUpstreamHeaders['x-api-key']).toBe('sk-ant-real-key');
-  });
-
-  it('OAuth mode replaces Authorization when container sends one', async () => {
-    proxyPort = await startProxy({
-      CLAUDE_CODE_OAUTH_TOKEN: 'real-oauth-token',
-    });
-
-    await makeRequest(
-      proxyPort,
-      {
-        method: 'POST',
-        path: '/api/oauth/claude_cli/create_api_key',
+        path: '/responses',
         headers: {
           'content-type': 'application/json',
           authorization: 'Bearer placeholder',
+          'x-nanoclaw-proxy-token': getCredentialProxyAuthToken(),
         },
       },
       '{}',
     );
 
     expect(lastUpstreamHeaders['authorization']).toBe(
-      'Bearer real-oauth-token',
+      'Bearer sk-openai-real-key',
     );
   });
 
-  it('OAuth mode does not inject Authorization when container omits it', async () => {
+  it('injects organization and project headers when configured', async () => {
     proxyPort = await startProxy({
-      CLAUDE_CODE_OAUTH_TOKEN: 'real-oauth-token',
+      OPENAI_API_KEY: 'sk-openai-real-key',
+      OPENAI_ORGANIZATION: 'org_123',
+      OPENAI_PROJECT: 'proj_456',
     });
 
-    // Post-exchange: container uses x-api-key only, no Authorization header
     await makeRequest(
       proxyPort,
       {
         method: 'POST',
-        path: '/v1/messages',
+        path: '/responses',
         headers: {
           'content-type': 'application/json',
-          'x-api-key': 'temp-key-from-exchange',
+          'x-nanoclaw-proxy-token': getCredentialProxyAuthToken(),
         },
       },
       '{}',
     );
 
-    expect(lastUpstreamHeaders['x-api-key']).toBe('temp-key-from-exchange');
-    expect(lastUpstreamHeaders['authorization']).toBeUndefined();
+    expect(lastUpstreamHeaders['openai-organization']).toBe('org_123');
+    expect(lastUpstreamHeaders['openai-project']).toBe('proj_456');
   });
 
-  it('strips hop-by-hop headers', async () => {
-    proxyPort = await startProxy({ ANTHROPIC_API_KEY: 'sk-ant-real-key' });
+  it('forwards request path relative to the configured base URL', async () => {
+    proxyPort = await startProxy({
+      OPENAI_API_KEY: 'sk-openai-real-key',
+    });
 
     await makeRequest(
       proxyPort,
       {
         method: 'POST',
-        path: '/v1/messages',
+        path: '/responses',
+        headers: {
+          'content-type': 'application/json',
+          'x-nanoclaw-proxy-token': getCredentialProxyAuthToken(),
+        },
+      },
+      '{}',
+    );
+
+    expect(lastUpstreamHeaders['host']).toBe(`127.0.0.1:${upstreamPort}`);
+    expect(lastUpstreamHeaders['authorization']).toBe(
+      'Bearer sk-openai-real-key',
+    );
+    expect(lastUpstreamUrl).toBe('/v1/responses');
+  });
+
+  it('preserves custom upstream path prefixes', async () => {
+    Object.assign(mockEnv, {
+      OPENAI_API_KEY: 'sk-openai-real-key',
+      OPENAI_BASE_URL: `http://127.0.0.1:${upstreamPort}/custom/prefix/v1`,
+    });
+    proxyServer = await startCredentialProxy(0);
+    proxyPort = (proxyServer.address() as AddressInfo).port;
+
+    await makeRequest(
+      proxyPort,
+      {
+        method: 'POST',
+        path: '/v1/responses',
+        headers: {
+          'content-type': 'application/json',
+          'x-nanoclaw-proxy-token': getCredentialProxyAuthToken(),
+        },
+      },
+      '{}',
+    );
+
+    expect(lastUpstreamUrl).toBe('/custom/prefix/v1/responses');
+  });
+
+  it('strips hop-by-hop headers', async () => {
+    proxyPort = await startProxy({ OPENAI_API_KEY: 'sk-openai-real-key' });
+
+    await makeRequest(
+      proxyPort,
+      {
+        method: 'POST',
+        path: '/responses',
         headers: {
           'content-type': 'application/json',
           connection: 'keep-alive',
           'keep-alive': 'timeout=5',
           'transfer-encoding': 'chunked',
+          'x-nanoclaw-proxy-token': getCredentialProxyAuthToken(),
         },
       },
       '{}',
@@ -170,8 +206,8 @@ describe('credential-proxy', () => {
 
   it('returns 502 when upstream is unreachable', async () => {
     Object.assign(mockEnv, {
-      ANTHROPIC_API_KEY: 'sk-ant-real-key',
-      ANTHROPIC_BASE_URL: 'http://127.0.0.1:59999',
+      OPENAI_API_KEY: 'sk-openai-real-key',
+      OPENAI_BASE_URL: 'http://127.0.0.1:59999/v1',
     });
     proxyServer = await startCredentialProxy(0);
     proxyPort = (proxyServer.address() as AddressInfo).port;
@@ -180,13 +216,37 @@ describe('credential-proxy', () => {
       proxyPort,
       {
         method: 'POST',
-        path: '/v1/messages',
-        headers: { 'content-type': 'application/json' },
+        path: '/responses',
+        headers: {
+          'content-type': 'application/json',
+          'x-nanoclaw-proxy-token': getCredentialProxyAuthToken(),
+        },
       },
       '{}',
     );
 
     expect(res.statusCode).toBe(502);
     expect(res.body).toBe('Bad Gateway');
+  });
+
+  it('rejects requests without the internal proxy token', async () => {
+    proxyPort = await startProxy({ OPENAI_API_KEY: 'sk-openai-real-key' });
+
+    const res = await makeRequest(
+      proxyPort,
+      {
+        method: 'POST',
+        path: '/responses',
+        headers: { 'content-type': 'application/json' },
+      },
+      '{}',
+    );
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toBe('Forbidden');
+  });
+
+  it('requires OPENAI_API_KEY', async () => {
+    await expect(startProxy({})).rejects.toThrow(/OPENAI_API_KEY is required/);
   });
 });

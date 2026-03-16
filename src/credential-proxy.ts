@@ -1,15 +1,9 @@
 /**
  * Credential proxy for container isolation.
- * Containers connect here instead of directly to the Anthropic API.
+ * Containers connect here instead of directly to the OpenAI API.
  * The proxy injects real credentials so containers never see them.
- *
- * Two auth modes:
- *   API key:  Proxy injects x-api-key on every request.
- *   OAuth:    Container CLI exchanges its placeholder token for a temp
- *             API key via /api/oauth/claude_cli/create_api_key.
- *             Proxy injects real OAuth token on that exchange request;
- *             subsequent requests carry the temp key which is valid as-is.
  */
+import { randomBytes, timingSafeEqual } from 'crypto';
 import { createServer, Server } from 'http';
 import { request as httpsRequest } from 'https';
 import { request as httpRequest, RequestOptions } from 'http';
@@ -17,10 +11,41 @@ import { request as httpRequest, RequestOptions } from 'http';
 import { readEnvFile } from './env.js';
 import { logger } from './logger.js';
 
-export type AuthMode = 'api-key' | 'oauth';
+const CREDENTIAL_PROXY_AUTH_HEADER = 'x-nanoclaw-proxy-token';
+const credentialProxyAuthToken = randomBytes(32).toString('hex');
 
-export interface ProxyConfig {
-  authMode: AuthMode;
+export function getCredentialProxyAuthToken(): string {
+  return credentialProxyAuthToken;
+}
+
+function hasValidCredentialProxyAuth(
+  headerValue: string | string[] | undefined,
+): boolean {
+  const provided = Array.isArray(headerValue) ? headerValue[0] || '' : headerValue || '';
+  if (!provided) {
+    return false;
+  }
+  const expected = Buffer.from(credentialProxyAuthToken, 'utf8');
+  const candidate = Buffer.from(provided, 'utf8');
+  if (candidate.length !== expected.length) {
+    return false;
+  }
+  return timingSafeEqual(candidate, expected);
+}
+
+function buildUpstreamPath(reqUrl: string | undefined, upstreamUrl: URL): string {
+  const incomingUrl = new URL(reqUrl || '/', 'http://127.0.0.1');
+  const upstreamBasePath = upstreamUrl.pathname.replace(/\/$/, '');
+
+  let relativePath = incomingUrl.pathname;
+  if (relativePath === '/v1') {
+    relativePath = '';
+  } else if (relativePath.startsWith('/v1/')) {
+    relativePath = relativePath.slice('/v1'.length);
+  }
+
+  const pathname = `${upstreamBasePath}${relativePath}` || '/';
+  return `${pathname}${incomingUrl.search}`;
 }
 
 export function startCredentialProxy(
@@ -28,62 +53,60 @@ export function startCredentialProxy(
   host = '127.0.0.1',
 ): Promise<Server> {
   const secrets = readEnvFile([
-    'ANTHROPIC_API_KEY',
-    'CLAUDE_CODE_OAUTH_TOKEN',
-    'ANTHROPIC_AUTH_TOKEN',
-    'ANTHROPIC_BASE_URL',
+    'OPENAI_API_KEY',
+    'OPENAI_BASE_URL',
+    'OPENAI_ORGANIZATION',
+    'OPENAI_PROJECT',
   ]);
 
-  const authMode: AuthMode = secrets.ANTHROPIC_API_KEY ? 'api-key' : 'oauth';
-  const oauthToken =
-    secrets.CLAUDE_CODE_OAUTH_TOKEN || secrets.ANTHROPIC_AUTH_TOKEN;
+  if (!secrets.OPENAI_API_KEY) {
+    throw new Error(
+      'OPENAI_API_KEY is required to start the NanoClaw credential proxy.',
+    );
+  }
 
   const upstreamUrl = new URL(
-    secrets.ANTHROPIC_BASE_URL || 'https://api.anthropic.com',
+    secrets.OPENAI_BASE_URL || 'https://api.openai.com/v1',
   );
   const isHttps = upstreamUrl.protocol === 'https:';
   const makeRequest = isHttps ? httpsRequest : httpRequest;
 
   return new Promise((resolve, reject) => {
     const server = createServer((req, res) => {
+      if (!hasValidCredentialProxyAuth(req.headers[CREDENTIAL_PROXY_AUTH_HEADER])) {
+        res.writeHead(403);
+        res.end('Forbidden');
+        return;
+      }
       const chunks: Buffer[] = [];
       req.on('data', (c) => chunks.push(c));
       req.on('end', () => {
         const body = Buffer.concat(chunks);
-        const headers: Record<string, string | number | string[] | undefined> =
-          {
-            ...(req.headers as Record<string, string>),
-            host: upstreamUrl.host,
-            'content-length': body.length,
-          };
+        const headers: Record<string, string | number | string[] | undefined> = {
+          ...(req.headers as Record<string, string>),
+          host: upstreamUrl.host,
+          'content-length': body.length,
+        };
 
         // Strip hop-by-hop headers that must not be forwarded by proxies
         delete headers['connection'];
         delete headers['keep-alive'];
         delete headers['transfer-encoding'];
-
-        if (authMode === 'api-key') {
-          // API key mode: inject x-api-key on every request
-          delete headers['x-api-key'];
-          headers['x-api-key'] = secrets.ANTHROPIC_API_KEY;
-        } else {
-          // OAuth mode: replace placeholder Bearer token with the real one
-          // only when the container actually sends an Authorization header
-          // (exchange request + auth probes). Post-exchange requests use
-          // x-api-key only, so they pass through without token injection.
-          if (headers['authorization']) {
-            delete headers['authorization'];
-            if (oauthToken) {
-              headers['authorization'] = `Bearer ${oauthToken}`;
-            }
-          }
+        delete headers['authorization'];
+        delete headers[CREDENTIAL_PROXY_AUTH_HEADER];
+        headers['authorization'] = `Bearer ${secrets.OPENAI_API_KEY}`;
+        if (secrets.OPENAI_ORGANIZATION) {
+          headers['openai-organization'] = secrets.OPENAI_ORGANIZATION;
+        }
+        if (secrets.OPENAI_PROJECT) {
+          headers['openai-project'] = secrets.OPENAI_PROJECT;
         }
 
         const upstream = makeRequest(
           {
             hostname: upstreamUrl.hostname,
             port: upstreamUrl.port || (isHttps ? 443 : 80),
-            path: req.url,
+            path: buildUpstreamPath(req.url, upstreamUrl),
             method: req.method,
             headers,
           } as RequestOptions,
@@ -110,16 +133,10 @@ export function startCredentialProxy(
     });
 
     server.listen(port, host, () => {
-      logger.info({ port, host, authMode }, 'Credential proxy started');
+      logger.info({ port, host }, 'Credential proxy started');
       resolve(server);
     });
 
     server.on('error', reject);
   });
-}
-
-/** Detect which auth mode the host is configured for. */
-export function detectAuthMode(): AuthMode {
-  const secrets = readEnvFile(['ANTHROPIC_API_KEY']);
-  return secrets.ANTHROPIC_API_KEY ? 'api-key' : 'oauth';
 }

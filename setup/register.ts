@@ -24,6 +24,33 @@ interface RegisterArgs {
   assistantName: string;
 }
 
+const DEFAULT_GLOBAL_AGENTS = `# Andy
+
+You are Andy, a NanoClaw assistant running inside a local container sandbox.
+
+## Defaults
+
+- Use local shell for repo and file inspection.
+- Use apply_patch for targeted file edits.
+- Use web search only when current external information is required.
+- Use send_message for progress updates during longer work.
+
+## Memory
+
+This file is global memory shared across groups. Store facts here only when the user explicitly asks to remember something globally.
+
+Prefer AGENTS.md as the primary memory file. CLAUDE.md is legacy compatibility only.
+`;
+
+const DEFAULT_GROUP_AGENTS = `# Andy
+
+You are Andy, a NanoClaw assistant running inside a local container sandbox.
+
+This file is group-specific memory. Keep durable facts, preferences, and notes that should persist for this group here.
+
+Prefer AGENTS.md as the primary memory file. CLAUDE.md is legacy compatibility only.
+`;
+
 function parseArgs(args: string[]): RegisterArgs {
   const result: RegisterArgs = {
     jid: '',
@@ -66,6 +93,22 @@ function parseArgs(args: string[]): RegisterArgs {
   }
 
   return result;
+}
+
+function ensureAgentMemoryFile(projectRoot: string, groupFolder: string): void {
+  const groupDir = path.join(projectRoot, 'groups', groupFolder);
+  const agentsPath = path.join(groupDir, 'AGENTS.md');
+  const legacyPath = path.join(groupDir, 'CLAUDE.md');
+  if (fs.existsSync(agentsPath)) {
+    return;
+  }
+  if (fs.existsSync(legacyPath)) {
+    fs.copyFileSync(legacyPath, agentsPath);
+    return;
+  }
+  const template =
+    groupFolder === 'global' ? DEFAULT_GLOBAL_AGENTS : DEFAULT_GROUP_AGENTS;
+  fs.writeFileSync(agentsPath, template);
 }
 
 export async function run(args: string[]): Promise<void> {
@@ -115,8 +158,10 @@ export async function run(args: string[]): Promise<void> {
   fs.mkdirSync(path.join(projectRoot, 'groups', parsed.folder, 'logs'), {
     recursive: true,
   });
+  ensureAgentMemoryFile(projectRoot, 'global');
+  ensureAgentMemoryFile(projectRoot, parsed.folder);
 
-  // Update assistant name in CLAUDE.md files if different from default
+  // Update assistant name in AGENTS.md / legacy CLAUDE.md files if different from default
   let nameUpdated = false;
   if (parsed.assistantName !== 'Andy') {
     logger.info(
@@ -125,6 +170,8 @@ export async function run(args: string[]): Promise<void> {
     );
 
     const mdFiles = [
+      path.join(projectRoot, 'groups', 'global', 'AGENTS.md'),
+      path.join(projectRoot, 'groups', parsed.folder, 'AGENTS.md'),
       path.join(projectRoot, 'groups', 'global', 'CLAUDE.md'),
       path.join(projectRoot, 'groups', parsed.folder, 'CLAUDE.md'),
     ];
@@ -138,7 +185,7 @@ export async function run(args: string[]): Promise<void> {
           `You are ${parsed.assistantName}`,
         );
         fs.writeFileSync(mdFile, content);
-        logger.info({ file: mdFile }, 'Updated CLAUDE.md');
+        logger.info({ file: mdFile }, 'Updated memory file');
       }
     }
 

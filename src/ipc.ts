@@ -8,6 +8,7 @@ import { AvailableGroup } from './container-runner.js';
 import { createTask, deleteTask, getTaskById, updateTask } from './db.js';
 import { isValidGroupFolder } from './group-folder.js';
 import { logger } from './logger.js';
+import { PersonalOpsService } from './personal-ops/service.js';
 import { RegisteredGroup } from './types.js';
 
 export interface IpcDeps {
@@ -22,6 +23,7 @@ export interface IpcDeps {
     availableGroups: AvailableGroup[],
     registeredJids: Set<string>,
   ) => void;
+  personalOpsService?: PersonalOpsService | null;
 }
 
 let ipcWatcherRunning = false;
@@ -62,6 +64,7 @@ export function startIpcWatcher(deps: IpcDeps): void {
       const isMain = folderIsMain.get(sourceGroup) === true;
       const messagesDir = path.join(ipcBaseDir, sourceGroup, 'messages');
       const tasksDir = path.join(ipcBaseDir, sourceGroup, 'tasks');
+      const personalOpsDir = path.join(ipcBaseDir, sourceGroup, 'personal-ops');
 
       // Process messages from this group's IPC directory
       try {
@@ -144,6 +147,38 @@ export function startIpcWatcher(deps: IpcDeps): void {
       } catch (err) {
         logger.error({ err, sourceGroup }, 'Error reading IPC tasks directory');
       }
+
+      try {
+        if (fs.existsSync(personalOpsDir)) {
+          const files = fs
+            .readdirSync(personalOpsDir)
+            .filter((f) => f.endsWith('.json'));
+          for (const file of files) {
+            const filePath = path.join(personalOpsDir, file);
+            try {
+              const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+              await processPersonalOpsIpc(data, sourceGroup, isMain, deps);
+              fs.unlinkSync(filePath);
+            } catch (err) {
+              logger.error(
+                { file, sourceGroup, err },
+                'Error processing IPC personal ops request',
+              );
+              const errorDir = path.join(ipcBaseDir, 'errors');
+              fs.mkdirSync(errorDir, { recursive: true });
+              fs.renameSync(
+                filePath,
+                path.join(errorDir, `${sourceGroup}-${file}`),
+              );
+            }
+          }
+        }
+      } catch (err) {
+        logger.error(
+          { err, sourceGroup },
+          'Error reading IPC personal ops directory',
+        );
+      }
     }
 
     setTimeout(processIpcFiles, IPC_POLL_INTERVAL);
@@ -151,6 +186,88 @@ export function startIpcWatcher(deps: IpcDeps): void {
 
   processIpcFiles();
   logger.info('IPC watcher started (per-group namespaces)');
+}
+
+async function processPersonalOpsIpc(
+  data: {
+    type: string;
+    requestId?: string;
+    snapshotName?: string;
+    targetType?: string;
+    targetId?: string;
+    field?: string;
+    value?: string;
+  },
+  sourceGroup: string,
+  isMain: boolean,
+  deps: IpcDeps,
+): Promise<void> {
+  if (!deps.personalOpsService) {
+    return;
+  }
+  if (!isMain) {
+    logger.warn({ sourceGroup }, 'Unauthorized personal ops IPC attempt blocked');
+    return;
+  }
+  if (data.type === 'get_snapshot' && data.requestId && data.snapshotName) {
+    const responsesDir = path.join(DATA_DIR, 'ipc', sourceGroup, 'personal-ops-responses');
+    fs.mkdirSync(responsesDir, { recursive: true });
+    const responsePath = path.join(responsesDir, `${data.requestId}.json`);
+    let output: unknown;
+    let error: string | null = null;
+
+    switch (data.snapshotName) {
+      case 'today':
+        output = deps.personalOpsService.getTodayView();
+        break;
+      case 'inbox':
+        output = deps.personalOpsService.getInboxView();
+        break;
+      case 'calendar':
+        output = deps.personalOpsService.getCalendarView();
+        break;
+      case 'workboard':
+        output = deps.personalOpsService.getWorkboardView();
+        break;
+      case 'history':
+        output = deps.personalOpsService.getHistoryView();
+        break;
+      case 'reports':
+        output = deps.personalOpsService.getReports();
+        break;
+      case 'connections':
+        output = deps.personalOpsService.listConnections();
+        break;
+      default:
+        error = `Unsupported personal ops snapshot "${data.snapshotName}".`;
+        break;
+    }
+
+    fs.writeFileSync(
+      responsePath,
+      JSON.stringify(
+        error
+          ? { ok: false, error }
+          : { ok: true, output: JSON.stringify(output, null, 2) },
+      ),
+      { mode: 0o600 },
+    );
+    return;
+  }
+  if (
+    data.type === 'record_correction' &&
+    data.targetType &&
+    data.targetId &&
+    data.field &&
+    data.value
+  ) {
+    deps.personalOpsService.recordCorrection({
+      targetType: data.targetType as any,
+      targetId: data.targetId,
+      field: data.field,
+      value: data.value,
+    });
+  }
 }
 
 export async function processTaskIpc(

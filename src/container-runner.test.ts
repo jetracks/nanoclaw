@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
 import { PassThrough } from 'stream';
+import { spawn } from 'child_process';
+import fs from 'fs';
 
 // Sentinel markers must match container-runner.ts
 const OUTPUT_START_MARKER = '---NANOCLAW_OUTPUT_START---';
@@ -15,6 +17,8 @@ vi.mock('./config.js', () => ({
   DATA_DIR: '/tmp/nanoclaw-test-data',
   GROUPS_DIR: '/tmp/nanoclaw-test-groups',
   IDLE_TIMEOUT: 1800000, // 30min
+  OPENAI_MODEL: 'gpt-5.4',
+  OPENAI_REASONING_EFFORT: 'medium',
   TIMEZONE: 'America/Los_Angeles',
 }));
 
@@ -86,7 +90,11 @@ vi.mock('child_process', async () => {
   };
 });
 
-import { runContainerAgent, ContainerOutput } from './container-runner.js';
+import {
+  buildContainerArgs,
+  runContainerAgent,
+  ContainerOutput,
+} from './container-runner.js';
 import type { RegisteredGroup } from './types.js';
 
 const testGroup: RegisteredGroup = {
@@ -115,6 +123,9 @@ describe('container-runner timeout behavior', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     fakeProc = createFakeProcess();
+    vi.mocked(fs.existsSync).mockReset();
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    vi.mocked(spawn).mockClear();
   });
 
   afterEach(() => {
@@ -134,7 +145,10 @@ describe('container-runner timeout behavior', () => {
     emitOutputMarker(fakeProc, {
       status: 'success',
       result: 'Here is my response',
-      newSessionId: 'session-123',
+      newSessionState: {
+        provider: 'openai',
+        previousResponseId: 'resp-123',
+      },
     });
 
     // Let output processing settle
@@ -151,7 +165,7 @@ describe('container-runner timeout behavior', () => {
 
     const result = await resultPromise;
     expect(result.status).toBe('success');
-    expect(result.newSessionId).toBe('session-123');
+    expect(result.newSessionState?.previousResponseId).toBe('resp-123');
     expect(onOutput).toHaveBeenCalledWith(
       expect.objectContaining({ result: 'Here is my response' }),
     );
@@ -193,7 +207,10 @@ describe('container-runner timeout behavior', () => {
     emitOutputMarker(fakeProc, {
       status: 'success',
       result: 'Done',
-      newSessionId: 'session-456',
+      newSessionState: {
+        provider: 'openai',
+        previousResponseId: 'resp-456',
+      },
     });
 
     await vi.advanceTimersByTimeAsync(10);
@@ -205,6 +222,70 @@ describe('container-runner timeout behavior', () => {
 
     const result = await resultPromise;
     expect(result.status).toBe('success');
-    expect(result.newSessionId).toBe('session-456');
+    expect(result.newSessionState?.previousResponseId).toBe('resp-456');
+  });
+
+  it('mounts /workspace/global for the main group', async () => {
+    vi.mocked(fs.existsSync).mockImplementation(
+      (filePath) =>
+        String(filePath) === '/tmp/nanoclaw-test-groups/global' ||
+        String(filePath).endsWith('/.env'),
+    );
+
+    const resultPromise = runContainerAgent(
+      {
+        ...testGroup,
+        folder: 'main',
+        isMain: true,
+      },
+      {
+        ...testInput,
+        groupFolder: 'main',
+        isMain: true,
+      },
+      () => {},
+    );
+
+    emitOutputMarker(fakeProc, {
+      status: 'success',
+      result: 'Done',
+    });
+    fakeProc.emit('close', 0);
+    await vi.advanceTimersByTimeAsync(10);
+    await resultPromise;
+
+    const args = vi.mocked(spawn).mock.calls[0]?.[1] as string[];
+    expect(
+      args.some((arg) =>
+        String(arg).includes('/tmp/nanoclaw-test-groups/global:/workspace/global'),
+      ),
+    ).toBe(true);
+  });
+
+  it('builds apple-container args without docker-only uid mapping', () => {
+    const args = buildContainerArgs(
+      [
+        {
+          hostPath: '/tmp/host',
+          containerPath: '/workspace/group',
+          readonly: false,
+        },
+      ],
+      'nanoclaw-test',
+      'apple-container',
+    );
+
+    expect(args).toContain('--volume');
+    expect(args).toContain('/tmp/host:/workspace/group');
+    expect(args).toContain('--env');
+    expect(args).toContain('NODE_OPTIONS=--dns-result-order=ipv4first');
+    expect(args).not.toContain('--user');
+    expect(args).not.toContain('--add-host=host.docker.internal:host-gateway');
+    expect(args).toContain(
+      'OPENAI_BASE_URL=http://192.168.64.1:3001/v1',
+    );
+    expect(
+      args.some((arg) => String(arg).startsWith('NANOCLAW_PROXY_TOKEN=')),
+    ).toBe(true);
   });
 });

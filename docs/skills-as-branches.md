@@ -1,3 +1,5 @@
+> Historical note: this document describes the older Claude plugin and skills distribution model. The current OpenAI-first repo treats skills as repo-local `SKILL.md` assets.
+
 # Skills as Branches
 
 ## Overview

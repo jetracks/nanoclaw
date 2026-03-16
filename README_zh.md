@@ -1,3 +1,5 @@
+> 注意：中文文档目前落后于 OpenAI 迁移。当前以 `README.md`、`AGENTS.md` 和实际运行时代码为准。
+
 <p align="center">
   <img src="assets/nanoclaw-logo.png" alt="NanoClaw" width="400">
 </p>

@@ -73,25 +73,24 @@ describe('registered groups DB query', () => {
 });
 
 describe('credentials detection', () => {
-  it('detects ANTHROPIC_API_KEY in env content', () => {
-    const content =
-      'SOME_KEY=value\nANTHROPIC_API_KEY=sk-ant-test123\nOTHER=foo';
-    const hasCredentials =
-      /^(CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_API_KEY)=/m.test(content);
+  it('detects OPENAI_API_KEY in env content', () => {
+    const content = 'SOME_KEY=value\nOPENAI_API_KEY=sk-openai-test123\nOTHER=foo';
+    const hasCredentials = /^OPENAI_API_KEY=/m.test(content);
     expect(hasCredentials).toBe(true);
   });
 
-  it('detects CLAUDE_CODE_OAUTH_TOKEN in env content', () => {
-    const content = 'CLAUDE_CODE_OAUTH_TOKEN=token123';
-    const hasCredentials =
-      /^(CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_API_KEY)=/m.test(content);
-    expect(hasCredentials).toBe(true);
+  it('detects legacy Anthropic config in env content', () => {
+    const content = 'ANTHROPIC_API_KEY=sk-ant-test123';
+    const hasLegacyAnthropic =
+      /^(CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_API_KEY|ANTHROPIC_BASE_URL|ANTHROPIC_AUTH_TOKEN)=/m.test(
+        content,
+      );
+    expect(hasLegacyAnthropic).toBe(true);
   });
 
   it('returns false when no credentials', () => {
     const content = 'ASSISTANT_NAME="Andy"\nOTHER=foo';
-    const hasCredentials =
-      /^(CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_API_KEY)=/m.test(content);
+    const hasCredentials = /^OPENAI_API_KEY=/m.test(content);
     expect(hasCredentials).toBe(false);
   });
 });
@@ -118,4 +117,3 @@ describe('channel auth detection', () => {
     expect(hasAuth('/tmp/nonexistent_auth_dir_xyz')).toBe(false);
   });
 });
-

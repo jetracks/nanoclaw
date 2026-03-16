@@ -1,23 +1,34 @@
 # Contributing
 
-## Source Code Changes
+## Source Changes
 
-**Accepted:** Bug fixes, security fixes, simplifications, reducing code.
+Accepted:
 
-**Not accepted:** Features, capabilities, compatibility, enhancements. These should be skills.
+- bug fixes
+- security fixes
+- simplifications
+- performance or reliability improvements
+
+Usually not accepted in core:
+
+- broad new product features
+- large compatibility layers
+- channel-specific growth that is better shipped as an optional add-on
 
 ## Skills
 
-A [skill](https://code.claude.com/docs/en/skills) is a markdown file in `.claude/skills/` that teaches Claude Code how to transform a NanoClaw installation.
+A skill is a checked-in `SKILL.md` workflow, typically under `.claude/skills/`, that teaches a coding agent how to transform a NanoClaw fork.
 
-A PR that contributes a skill should not modify any source files.
+Skills are repo assets, not a provider feature. They can be used by Codex/OpenAI-driven workflows the same way they were previously used by Claude-driven workflows.
 
-Your skill should contain the **instructions** Claude follows to add the feature—not pre-built code. See `/add-telegram` for a good example.
+If you contribute a skill, prefer keeping the change isolated to the skill itself rather than modifying core source files.
 
-### Why?
+## Testing
 
-Every user should have clean and minimal code that does exactly what they need. Skills let users selectively add features to their fork without inheriting code for features they don't want.
+Run the relevant checks before sending a change:
 
-### Testing
-
-Test your skill by running it on a fresh clone before submitting.
+```bash
+npm test
+npm run build
+npm --prefix container/agent-runner run build
+```

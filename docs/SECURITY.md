@@ -2,121 +2,91 @@
 
 ## Trust Model
 
-| Entity | Trust Level | Rationale |
-|--------|-------------|-----------|
-| Main group | Trusted | Private self-chat, admin control |
-| Non-main groups | Untrusted | Other users may be malicious |
-| Container agents | Sandboxed | Isolated execution environment |
-| WhatsApp messages | User input | Potential prompt injection |
+| Entity | Trust Level | Notes |
+|--------|-------------|-------|
+| Host process | Trusted | Owns credentials, routing, authorization, and container lifecycle |
+| Main group | Trusted admin context | Can register groups and manage cross-group tasks |
+| Non-main groups | Untrusted input | Other humans may be malicious or compromised |
+| Container agents | Sandboxed | Execute inside isolated containers with explicit mounts only |
 
-## Security Boundaries
+## Primary Boundaries
 
-### 1. Container Isolation (Primary Boundary)
+### Container Isolation
 
-Agents execute in containers (lightweight Linux VMs), providing:
-- **Process isolation** - Container processes cannot affect the host
-- **Filesystem isolation** - Only explicitly mounted directories are visible
-- **Non-root execution** - Runs as unprivileged `node` user (uid 1000)
-- **Ephemeral containers** - Fresh environment per invocation (`--rm`)
+Each group runs inside its own container workspace.
 
-This is the primary security boundary. Rather than relying on application-level permission checks, the attack surface is limited by what's mounted.
+- the container runs as an unprivileged user
+- only explicitly mounted paths are visible
+- project root can be mounted read-only
+- writable paths are restricted to the group workspace, IPC directories, and per-group session state
 
-### 2. Mount Security
+### Credential Isolation
 
-**External Allowlist** - Mount permissions stored at `~/.config/nanoclaw/mount-allowlist.json`, which is:
-- Outside project root
-- Never mounted into containers
-- Cannot be modified by agents
+Real OpenAI credentials never enter the container.
 
-**Default Blocked Patterns:**
+The host starts a credential proxy and injects authentication headers outside the sandbox:
+
+1. the container receives `OPENAI_BASE_URL=http://host-gateway:proxy/v1`
+2. the container receives a placeholder `OPENAI_API_KEY`
+3. the OpenAI client sends requests to the host proxy
+4. the host proxy replaces placeholder auth with the real `OPENAI_API_KEY`
+5. optional `OPENAI_ORGANIZATION` and `OPENAI_PROJECT` headers are added on the host side
+
+This keeps the real API key out of container env vars, files, and process state.
+
+### Session Isolation
+
+Each group gets its own session directory under:
+
+```text
+data/sessions/<group>/openai/
 ```
-.ssh, .gnupg, .aws, .azure, .gcloud, .kube, .docker,
-credentials, .env, .netrc, .npmrc, id_rsa, id_ed25519,
-private_key, .secret
-```
 
-**Protections:**
-- Symlink resolution before validation (prevents traversal attacks)
-- Container path validation (rejects `..` and absolute paths)
-- `nonMainReadOnly` option forces read-only for non-main groups
+This directory stores transcript JSONL, summaries, and compaction metadata for that group only.
 
-**Read-Only Project Root:**
+Legacy `.claude/` session data may still exist on disk after migration, but it is no longer active.
 
-The main group's project root is mounted read-only. Writable paths the agent needs (group folder, IPC, `.claude/`) are mounted separately. This prevents the agent from modifying host application code (`src/`, `dist/`, `package.json`, etc.) which would bypass the sandbox entirely on next restart.
+### IPC Authorization
 
-### 3. Session Isolation
+The host validates task and messaging operations against the originating group.
 
-Each group has isolated Claude sessions at `data/sessions/{group}/.claude/`:
-- Groups cannot see other groups' conversation history
-- Session data includes full message history and file contents read
-- Prevents cross-group information disclosure
+Main group:
 
-### 4. IPC Authorization
+- may register groups
+- may view and manage tasks across groups
+- may schedule tasks for other groups
 
-Messages and task operations are verified against group identity:
+Non-main groups:
 
-| Operation | Main Group | Non-Main Group |
-|-----------|------------|----------------|
-| Send message to own chat | ✓ | ✓ |
-| Send message to other chats | ✓ | ✗ |
-| Schedule task for self | ✓ | ✓ |
-| Schedule task for others | ✓ | ✗ |
-| View all tasks | ✓ | Own only |
-| Manage other groups | ✓ | ✗ |
+- may message only their own chat
+- may manage only their own tasks
 
-### 5. Credential Isolation (Credential Proxy)
+## Memory and Files
 
-Real API credentials **never enter containers**. Instead, the host runs an HTTP credential proxy that injects authentication headers transparently.
+Primary memory files:
 
-**How it works:**
-1. Host starts a credential proxy on `CREDENTIAL_PROXY_PORT` (default: 3001)
-2. Containers receive `ANTHROPIC_BASE_URL=http://host.docker.internal:<port>` and `ANTHROPIC_API_KEY=placeholder`
-3. The SDK sends API requests to the proxy with the placeholder key
-4. The proxy strips placeholder auth, injects real credentials (`x-api-key` or `Authorization: Bearer`), and forwards to `api.anthropic.com`
-5. Agents cannot discover real credentials — not in environment, stdin, files, or `/proc`
+- `groups/global/AGENTS.md`
+- `groups/<group>/AGENTS.md`
 
-**NOT Mounted:**
-- WhatsApp session (`store/auth/`) - host only
-- Mount allowlist - external, never mounted
-- Any credentials matching blocked patterns
-- `.env` is shadowed with `/dev/null` in the project root mount
+Legacy fallback files:
 
-## Privilege Comparison
+- `groups/global/CLAUDE.md`
+- `groups/<group>/CLAUDE.md`
 
-| Capability | Main Group | Non-Main Group |
-|------------|------------|----------------|
-| Project root access | `/workspace/project` (ro) | None |
-| Group folder | `/workspace/group` (rw) | `/workspace/group` (rw) |
-| Global memory | Implicit via project | `/workspace/global` (ro) |
-| Additional mounts | Configurable | Read-only unless allowed |
-| Network access | Unrestricted | Unrestricted |
-| MCP tools | All | All |
+When both exist, `AGENTS.md` takes precedence.
 
-## Security Architecture Diagram
+## Remote Control
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                        UNTRUSTED ZONE                             │
-│  WhatsApp Messages (potentially malicious)                        │
-└────────────────────────────────┬─────────────────────────────────┘
-                                 │
-                                 ▼ Trigger check, input escaping
-┌──────────────────────────────────────────────────────────────────┐
-│                     HOST PROCESS (TRUSTED)                        │
-│  • Message routing                                                │
-│  • IPC authorization                                              │
-│  • Mount validation (external allowlist)                          │
-│  • Container lifecycle                                            │
-│  • Credential proxy (injects auth headers)                       │
-└────────────────────────────────┬─────────────────────────────────┘
-                                 │
-                                 ▼ Explicit mounts only, no secrets
-┌──────────────────────────────────────────────────────────────────┐
-│                CONTAINER (ISOLATED/SANDBOXED)                     │
-│  • Agent execution                                                │
-│  • Bash commands (sandboxed)                                      │
-│  • File operations (limited to mounts)                            │
-│  • API calls routed through credential proxy                     │
-│  • No real credentials in environment or filesystem              │
-└──────────────────────────────────────────────────────────────────┘
-```
+`/remote-control` now opens a localhost-only inspector URL with a random token.
+
+- the inspector is served by NanoClaw itself
+- it exposes active-group state and transcript views
+- it can inject follow-up input into an active group
+- it does not depend on a provider-hosted browser or remote IDE session
+
+## Security Goals
+
+- keep secrets on the host
+- keep cross-group state isolated
+- keep the trusted surface small and auditable
+- keep agent power bounded by mounts, IPC authorization, and container execution

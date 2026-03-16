@@ -1,22 +1,34 @@
 {
   "name": "nanoclaw",
   "version": "1.2.14",
-  "description": "Personal Claude assistant. Lightweight, secure, customizable.",
+  "description": "Local-first OpenAI assistant with per-group container isolation.",
   "type": "module",
+  "workspaces": [
+    "ui"
+  ],
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "tsx src/index.ts",
-    "typecheck": "tsc --noEmit",
+    "preinstall": "node scripts/ensure-runtime.mjs",
+    "guard:runtime": "node scripts/ensure-runtime.mjs",
+    "guard:runtime:native": "node scripts/ensure-runtime.mjs --check-native",
+    "build": "npm run guard:runtime && npm run build:server && npm run build:ui",
+    "build:server": "tsc",
+    "build:ui": "npm run build --workspace nanoclaw-ui",
+    "start": "node scripts/start.mjs",
+    "stop": "node scripts/stop.mjs",
+    "restart": "node scripts/restart.mjs",
+    "dev": "npm run guard:runtime:native && tsx src/index.ts",
+    "dev:ui": "npm run dev --workspace nanoclaw-ui",
+    "typecheck": "npm run guard:runtime && tsc --noEmit",
     "format": "prettier --write \"src/**/*.ts\"",
     "format:fix": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",
     "prepare": "husky",
-    "setup": "tsx setup/index.ts",
-    "auth": "tsx src/whatsapp-auth.ts",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "setup": "npm run guard:runtime:native && tsx setup/index.ts",
+    "auth": "npm run guard:runtime:native && tsx src/whatsapp-auth.ts",
+    "test": "npm run guard:runtime:native && vitest run",
+    "test:watch": "npm run guard:runtime:native && vitest",
+    "test:ui": "npm run test --workspace nanoclaw-ui -- --run"
   },
   "dependencies": {
     "better-sqlite3": "^11.8.1",
@@ -37,6 +49,6 @@
     "vitest": "^4.0.18"
   },
   "engines": {
-    "node": ">=20"
+    "node": "22.x"
   }
 }

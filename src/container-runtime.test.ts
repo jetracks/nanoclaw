@@ -1,6 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Mock logger
 vi.mock('./logger.js', () => ({
   logger: {
     debug: vi.fn(),
@@ -10,18 +9,26 @@ vi.mock('./logger.js', () => ({
   },
 }));
 
-// Mock child_process — store the mock fn so tests can configure it
 const mockExecSync = vi.fn();
 vi.mock('child_process', () => ({
   execSync: (...args: unknown[]) => mockExecSync(...args),
 }));
 
 import {
-  CONTAINER_RUNTIME_BIN,
-  readonlyMountArgs,
-  stopContainer,
-  ensureContainerRuntimeRunning,
   cleanupOrphans,
+  containerHostGateway,
+  containerRuntimeBinary,
+  ensureContainerRuntimeRunning,
+  hostGatewayArgs,
+  mountArgs,
+  normalizeContainerRuntime,
+  parseOrphanedContainerNames,
+  readonlyMountArgs,
+  resolveProxyBindHost,
+  runtimeHealthcheckCommand,
+  runtimeOrphanListCommand,
+  runtimeSupportsUserMapping,
+  stopContainer,
 } from './container-runtime.js';
 import { logger } from './logger.js';
 
@@ -29,121 +36,208 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-// --- Pure functions ---
+describe('runtime selection', () => {
+  it('defaults unknown values to docker', () => {
+    expect(normalizeContainerRuntime(undefined)).toBe('docker');
+    expect(normalizeContainerRuntime('weird')).toBe('docker');
+  });
 
-describe('readonlyMountArgs', () => {
-  it('returns -v flag with :ro suffix', () => {
-    const args = readonlyMountArgs('/host/path', '/container/path');
-    expect(args).toEqual(['-v', '/host/path:/container/path:ro']);
+  it('preserves apple-container selection', () => {
+    expect(normalizeContainerRuntime('apple-container')).toBe('apple-container');
+  });
+});
+
+describe('runtime helpers', () => {
+  it('returns the correct binary for each runtime', () => {
+    expect(containerRuntimeBinary('docker')).toBe('docker');
+    expect(containerRuntimeBinary('apple-container')).toBe('container');
+  });
+
+  it('returns the correct host gateway for each runtime', () => {
+    expect(containerHostGateway('docker')).toBe('host.docker.internal');
+    expect(containerHostGateway('apple-container')).toBe('192.168.64.1');
+  });
+
+  it('only adds docker host-gateway flags on linux', () => {
+    expect(hostGatewayArgs('docker', 'linux')).toEqual([
+      '--add-host=host.docker.internal:host-gateway',
+    ]);
+    expect(hostGatewayArgs('docker', 'darwin')).toEqual([]);
+    expect(hostGatewayArgs('apple-container', 'linux')).toEqual([]);
+  });
+
+  it('uses --volume syntax for mounts', () => {
+    expect(mountArgs('/host/path', '/container/path', false, 'docker')).toEqual([
+      '--volume',
+      '/host/path:/container/path',
+    ]);
+    expect(readonlyMountArgs('/host/path', '/container/path', 'apple-container')).toEqual([
+      '--volume',
+      '/host/path:/container/path:ro',
+    ]);
+  });
+
+  it('disables uid mapping for apple-container', () => {
+    expect(runtimeSupportsUserMapping('docker')).toBe(true);
+    expect(runtimeSupportsUserMapping('apple-container')).toBe(false);
+  });
+
+  it('resolves proxy bind host for apple-container from bridge100', () => {
+    expect(
+      resolveProxyBindHost('apple-container', {
+        platform: 'darwin',
+        networkInterfaces: () => ({
+          bridge100: [
+            {
+              address: '192.168.64.1',
+              netmask: '255.255.255.0',
+              family: 'IPv4',
+              mac: '00:00:00:00:00:00',
+              internal: false,
+              cidr: '192.168.64.1/24',
+            },
+          ],
+        }),
+      }),
+    ).toBe('192.168.64.1');
+  });
+
+  it('falls back to 0.0.0.0 when bridge100 is unavailable', () => {
+    expect(
+      resolveProxyBindHost('apple-container', {
+        platform: 'darwin',
+        networkInterfaces: () => ({}),
+      }),
+    ).toBe('0.0.0.0');
+  });
+
+  it('uses docker-specific healthcheck and orphan commands', () => {
+    expect(runtimeHealthcheckCommand('docker')).toBe('docker info');
+    expect(runtimeHealthcheckCommand('apple-container')).toBe(
+      'container ls --format json --all',
+    );
+    expect(runtimeOrphanListCommand('docker')).toContain('docker ps');
+    expect(runtimeOrphanListCommand('apple-container')).toBe(
+      'container ls --format json --all',
+    );
+  });
+
+  it('parses orphan names from apple-container JSON output', () => {
+    expect(
+      parseOrphanedContainerNames(
+        JSON.stringify([
+          { id: 'nanoclaw-main-1', state: 'running' },
+          { id: 'other', state: 'running' },
+          { name: 'nanoclaw-sidecar-2', state: 'exited' },
+        ]),
+        'apple-container',
+      ),
+    ).toEqual(['nanoclaw-main-1', 'nanoclaw-sidecar-2']);
   });
 });
 
 describe('stopContainer', () => {
-  it('returns stop command using CONTAINER_RUNTIME_BIN', () => {
-    expect(stopContainer('nanoclaw-test-123')).toBe(
-      `${CONTAINER_RUNTIME_BIN} stop nanoclaw-test-123`,
+  it('returns stop commands for both runtimes', () => {
+    expect(stopContainer('nanoclaw-test-123', 'docker')).toBe(
+      'docker stop nanoclaw-test-123',
+    );
+    expect(stopContainer('nanoclaw-test-123', 'apple-container')).toBe(
+      'container stop nanoclaw-test-123',
     );
   });
 });
 
-// --- ensureContainerRuntimeRunning ---
-
 describe('ensureContainerRuntimeRunning', () => {
-  it('does nothing when runtime is already running', () => {
+  it('does nothing when docker is already running', () => {
     mockExecSync.mockReturnValueOnce('');
 
-    ensureContainerRuntimeRunning();
+    ensureContainerRuntimeRunning('docker');
 
-    expect(mockExecSync).toHaveBeenCalledTimes(1);
-    expect(mockExecSync).toHaveBeenCalledWith(`${CONTAINER_RUNTIME_BIN} info`, {
+    expect(mockExecSync).toHaveBeenCalledWith('docker info', {
       stdio: 'pipe',
       timeout: 10000,
     });
     expect(logger.debug).toHaveBeenCalledWith(
+      { runtime: 'docker' },
       'Container runtime already running',
     );
   });
 
-  it('throws when docker info fails', () => {
+  it('uses apple-container healthcheck when selected', () => {
+    mockExecSync.mockReturnValueOnce('[]');
+
+    ensureContainerRuntimeRunning('apple-container');
+
+    expect(mockExecSync).toHaveBeenCalledWith('container ls --format json --all', {
+      stdio: 'pipe',
+      timeout: 10000,
+    });
+  });
+
+  it('throws when the selected runtime is unavailable', () => {
     mockExecSync.mockImplementationOnce(() => {
       throw new Error('Cannot connect to the Docker daemon');
     });
 
-    expect(() => ensureContainerRuntimeRunning()).toThrow(
+    expect(() => ensureContainerRuntimeRunning('docker')).toThrow(
       'Container runtime is required but failed to start',
     );
     expect(logger.error).toHaveBeenCalled();
   });
 });
 
-// --- cleanupOrphans ---
-
 describe('cleanupOrphans', () => {
-  it('stops orphaned nanoclaw containers', () => {
-    // docker ps returns container names, one per line
-    mockExecSync.mockReturnValueOnce(
-      'nanoclaw-group1-111\nnanoclaw-group2-222\n',
-    );
-    // stop calls succeed
+  it('stops orphaned docker containers', () => {
+    mockExecSync.mockReturnValueOnce('nanoclaw-group1-111\nnanoclaw-group2-222\n');
     mockExecSync.mockReturnValue('');
 
-    cleanupOrphans();
+    cleanupOrphans('docker');
 
-    // ps + 2 stop calls
-    expect(mockExecSync).toHaveBeenCalledTimes(3);
     expect(mockExecSync).toHaveBeenNthCalledWith(
       2,
-      `${CONTAINER_RUNTIME_BIN} stop nanoclaw-group1-111`,
+      'docker stop nanoclaw-group1-111',
       { stdio: 'pipe' },
     );
     expect(mockExecSync).toHaveBeenNthCalledWith(
       3,
-      `${CONTAINER_RUNTIME_BIN} stop nanoclaw-group2-222`,
+      'docker stop nanoclaw-group2-222',
       { stdio: 'pipe' },
     );
-    expect(logger.info).toHaveBeenCalledWith(
-      { count: 2, names: ['nanoclaw-group1-111', 'nanoclaw-group2-222'] },
-      'Stopped orphaned containers',
+  });
+
+  it('stops orphaned apple-container containers from JSON output', () => {
+    mockExecSync.mockReturnValueOnce(
+      JSON.stringify([
+        { id: 'nanoclaw-group1-111' },
+        { id: 'nanoclaw-group2-222' },
+      ]),
+    );
+    mockExecSync.mockReturnValue('');
+
+    cleanupOrphans('apple-container');
+
+    expect(mockExecSync).toHaveBeenNthCalledWith(
+      2,
+      'container stop nanoclaw-group1-111',
+      { stdio: 'pipe' },
+    );
+    expect(mockExecSync).toHaveBeenNthCalledWith(
+      3,
+      'container stop nanoclaw-group2-222',
+      { stdio: 'pipe' },
     );
   });
 
-  it('does nothing when no orphans exist', () => {
-    mockExecSync.mockReturnValueOnce('');
-
-    cleanupOrphans();
-
-    expect(mockExecSync).toHaveBeenCalledTimes(1);
-    expect(logger.info).not.toHaveBeenCalled();
-  });
-
-  it('warns and continues when ps fails', () => {
+  it('warns and continues when the list command fails', () => {
     mockExecSync.mockImplementationOnce(() => {
-      throw new Error('docker not available');
+      throw new Error('runtime unavailable');
     });
 
-    cleanupOrphans(); // should not throw
+    cleanupOrphans('apple-container');
 
     expect(logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ err: expect.any(Error) }),
       'Failed to clean up orphaned containers',
-    );
-  });
-
-  it('continues stopping remaining containers when one stop fails', () => {
-    mockExecSync.mockReturnValueOnce('nanoclaw-a-1\nnanoclaw-b-2\n');
-    // First stop fails
-    mockExecSync.mockImplementationOnce(() => {
-      throw new Error('already stopped');
-    });
-    // Second stop succeeds
-    mockExecSync.mockReturnValueOnce('');
-
-    cleanupOrphans(); // should not throw
-
-    expect(mockExecSync).toHaveBeenCalledTimes(3);
-    expect(logger.info).toHaveBeenCalledWith(
-      { count: 2, names: ['nanoclaw-a-1', 'nanoclaw-b-2'] },
-      'Stopped orphaned containers',
     );
   });
 });

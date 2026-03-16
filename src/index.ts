@@ -1,10 +1,13 @@
+import { CronExpressionParser } from 'cron-parser';
 import fs from 'fs';
 import path from 'path';
 
 import {
   ASSISTANT_NAME,
   CREDENTIAL_PROXY_PORT,
+  DATA_DIR,
   IDLE_TIMEOUT,
+  PERSONAL_OPS_ENABLED,
   POLL_INTERVAL,
   TIMEZONE,
   TRIGGER_PATTERN,
@@ -27,13 +30,18 @@ import {
   PROXY_BIND_HOST,
 } from './container-runtime.js';
 import {
+  createTask,
+  deleteTask,
   getAllChats,
   getAllRegisteredGroups,
   getAllSessions,
   getAllTasks,
+  getRecentConversationMessages,
   getMessagesSince,
   getNewMessages,
-  getRegisteredGroup,
+  getTaskById,
+  getTaskRunLogs,
+  getTasksForGroup,
   getRouterState,
   initDatabase,
   setRegisteredGroup,
@@ -41,16 +49,20 @@ import {
   setSession,
   storeChatMetadata,
   storeMessage,
+  storeMessageDirect,
+  updateTask,
 } from './db.js';
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
 import { findChannel, formatMessages, formatOutbound } from './router.js';
 import {
+  configureRemoteControl,
   restoreRemoteControl,
   startRemoteControl,
   stopRemoteControl,
 } from './remote-control.js';
+import { startOperatorUi, stopOperatorUi } from './operator-ui.js';
 import {
   isSenderAllowed,
   isTriggerAllowed,
@@ -58,20 +70,85 @@ import {
   shouldDropMessage,
 } from './sender-allowlist.js';
 import { startSchedulerLoop } from './task-scheduler.js';
-import { Channel, NewMessage, RegisteredGroup } from './types.js';
+import {
+  Channel,
+  NewMessage,
+  OpenAISessionState,
+  RegisteredGroup,
+} from './types.js';
 import { logger } from './logger.js';
+import { PersonalOpsService } from './personal-ops/service.js';
+import { startPersonalOpsScheduler } from './personal-ops/scheduler.js';
 
 // Re-export for backwards compatibility during refactor
 export { escapeXml, formatMessages } from './router.js';
 
 let lastTimestamp = '';
-let sessions: Record<string, string> = {};
+let sessions: Record<string, OpenAISessionState> = {};
 let registeredGroups: Record<string, RegisteredGroup> = {};
 let lastAgentTimestamp: Record<string, string> = {};
 let messageLoopRunning = false;
 
 const channels: Channel[] = [];
 const queue = new GroupQueue();
+const personalOpsService = PERSONAL_OPS_ENABLED
+  ? new PersonalOpsService()
+  : null;
+
+const PERSONAL_OPS_COMMANDS = new Set([
+  '/today',
+  '/inbox',
+  '/calendar',
+  '/standup',
+  '/wrap',
+  '/history',
+  '/what-changed',
+  '/followups',
+  '/task',
+  '/note',
+  '/correct',
+]);
+
+function getMainGroupJid(): string | null {
+  return (
+    Object.entries(registeredGroups).find(([, group]) => group.isMain === true)?.[0] ||
+    null
+  );
+}
+
+async function sendOutboundMessage(
+  chatJid: string,
+  rawText: string,
+): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
+  const channel = findChannel(channels, chatJid);
+  if (!channel) {
+    logger.warn({ jid: chatJid }, 'No channel owns JID, cannot send message');
+    return { ok: false, error: 'No channel owns JID.' };
+  }
+
+  const text = formatOutbound(rawText);
+  if (!text) {
+    return { ok: false, error: 'Outbound message was empty after formatting.' };
+  }
+
+  await channel.sendMessage(chatJid, text);
+
+  const timestamp = new Date().toISOString();
+  const group = registeredGroups[chatJid];
+  storeChatMetadata(chatJid, timestamp, group?.name, channel.name, true);
+  storeMessageDirect({
+    id: `bot_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+    chat_jid: chatJid,
+    sender: `nanoclaw:${ASSISTANT_NAME.toLowerCase()}`,
+    sender_name: ASSISTANT_NAME,
+    content: text,
+    timestamp,
+    is_from_me: true,
+    is_bot_message: true,
+  });
+
+  return { ok: true, text };
+}
 
 function loadState(): void {
   lastTimestamp = getRouterState('last_timestamp') || '';
@@ -223,8 +300,8 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
       logger.info({ group: group.name }, `Agent output: ${raw.slice(0, 200)}`);
       if (text) {
-        await channel.sendMessage(chatJid, text);
-        outputSentToUser = true;
+        const sent = await sendOutboundMessage(chatJid, text);
+        outputSentToUser = sent.ok;
       }
       // Only reset idle timer on actual results, not session-update markers (result: null)
       resetIdleTimer();
@@ -272,7 +349,7 @@ async function runAgent(
   onOutput?: (output: ContainerOutput) => Promise<void>,
 ): Promise<'success' | 'error'> {
   const isMain = group.isMain === true;
-  const sessionId = sessions[group.folder];
+  const session = sessions[group.folder];
 
   // Update tasks snapshot for container to read (filtered by group)
   const tasks = getAllTasks();
@@ -302,9 +379,9 @@ async function runAgent(
   // Wrap onOutput to track session ID from streamed results
   const wrappedOnOutput = onOutput
     ? async (output: ContainerOutput) => {
-        if (output.newSessionId) {
-          sessions[group.folder] = output.newSessionId;
-          setSession(group.folder, output.newSessionId);
+        if (output.newSessionState) {
+          sessions[group.folder] = output.newSessionState;
+          setSession(group.folder, output.newSessionState);
         }
         await onOutput(output);
       }
@@ -315,7 +392,7 @@ async function runAgent(
       group,
       {
         prompt,
-        sessionId,
+        session,
         groupFolder: group.folder,
         chatJid,
         isMain,
@@ -326,9 +403,9 @@ async function runAgent(
       wrappedOnOutput,
     );
 
-    if (output.newSessionId) {
-      sessions[group.folder] = output.newSessionId;
-      setSession(group.folder, output.newSessionId);
+    if (output.newSessionState) {
+      sessions[group.folder] = output.newSessionState;
+      setSession(group.folder, output.newSessionState);
     }
 
     if (output.status === 'error') {
@@ -476,6 +553,31 @@ async function main(): Promise<void> {
   logger.info('Database initialized');
   loadState();
   restoreRemoteControl();
+  configureRemoteControl({
+    getGroups: () => {
+      const inspectable = new Map(
+        queue
+          .getInspectableStates()
+          .map((state) => [state.groupJid, state] as const),
+      );
+      return Object.entries(registeredGroups).map(([chatJid, group]) => {
+        const queueState = inspectable.get(chatJid);
+        const session = sessions[group.folder];
+        return {
+          chatJid,
+          name: group.name,
+          folder: group.folder,
+          active: queueState?.active === true && queueState.isTaskContainer !== true,
+          idleWaiting: queueState?.idleWaiting === true,
+          transcriptPath:
+            session?.transcriptPath ||
+            path.join(DATA_DIR, 'sessions', group.folder, 'openai', 'current-transcript.jsonl'),
+          previousResponseId: session?.previousResponseId,
+        };
+      });
+    },
+    sendInput: (chatJid, text) => queue.sendMessage(chatJid, text),
+  });
 
   // Start credential proxy (containers route API calls through this)
   const proxyServer = await startCredentialProxy(
@@ -487,6 +589,7 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
     proxyServer.close();
+    await stopOperatorUi();
     await queue.shutdown(10000);
     for (const ch of channels) await ch.disconnect();
     process.exit(0);
@@ -512,16 +615,12 @@ async function main(): Promise<void> {
     const channel = findChannel(channels, chatJid);
     if (!channel) return;
 
-    if (command === '/remote-control') {
-      const result = await startRemoteControl(
-        msg.sender,
-        chatJid,
-        process.cwd(),
-      );
+      if (command === '/remote-control') {
+      const result = await startRemoteControl(msg.sender, chatJid);
       if (result.ok) {
-        await channel.sendMessage(chatJid, result.url);
+        await sendOutboundMessage(chatJid, result.url);
       } else {
-        await channel.sendMessage(
+        await sendOutboundMessage(
           chatJid,
           `Remote Control failed: ${result.error}`,
         );
@@ -529,42 +628,81 @@ async function main(): Promise<void> {
     } else {
       const result = stopRemoteControl();
       if (result.ok) {
-        await channel.sendMessage(chatJid, 'Remote Control session ended.');
+        await sendOutboundMessage(chatJid, 'Remote Control session ended.');
       } else {
-        await channel.sendMessage(chatJid, result.error);
+        await sendOutboundMessage(chatJid, result.error);
       }
     }
   }
 
+  async function handlePersonalOpsCommand(
+    trimmed: string,
+    chatJid: string,
+  ): Promise<void> {
+    if (!personalOpsService) {
+      await sendOutboundMessage(
+        chatJid,
+        'Personal ops is disabled in this NanoClaw instance.',
+      );
+      return;
+    }
+    const [command, ...rest] = trimmed.split(/\s+/);
+    const args = rest.join(' ').trim();
+    if (command === '/standup') {
+      const snapshot = await personalOpsService.generateReport('standup');
+      await sendOutboundMessage(chatJid, snapshot.groupedOutput);
+      return;
+    }
+    if (command === '/wrap' && !personalOpsService.getLatestReport('wrap')) {
+      const snapshot = await personalOpsService.generateReport('wrap');
+      await sendOutboundMessage(chatJid, snapshot.groupedOutput);
+      return;
+    }
+    await sendOutboundMessage(
+      chatJid,
+      personalOpsService.formatChatCommand(command, args),
+    );
+  }
+
+  const acceptInboundMessage = (chatJid: string, msg: NewMessage): void => {
+    const trimmed = msg.content.trim();
+    if (trimmed === '/remote-control' || trimmed === '/remote-control-end') {
+      handleRemoteControl(trimmed, chatJid, msg).catch((err) =>
+        logger.error({ err, chatJid }, 'Remote control command error'),
+      );
+      return;
+    }
+    const command = trimmed.split(/\s+/, 1)[0];
+    if (PERSONAL_OPS_COMMANDS.has(command)) {
+      handlePersonalOpsCommand(trimmed, chatJid).catch((err) =>
+        logger.error({ err, chatJid, command }, 'Personal ops command error'),
+      );
+      return;
+    }
+
+    if (!msg.is_from_me && !msg.is_bot_message && registeredGroups[chatJid]) {
+      const cfg = loadSenderAllowlist();
+      if (
+        shouldDropMessage(chatJid, cfg) &&
+        !isSenderAllowed(chatJid, msg.sender, cfg)
+      ) {
+        if (cfg.logDenied) {
+          logger.debug(
+            { chatJid, sender: msg.sender },
+            'sender-allowlist: dropping message (drop mode)',
+          );
+        }
+        return;
+      }
+    }
+
+    storeMessage(msg);
+  };
+
   // Channel callbacks (shared by all channels)
   const channelOpts = {
     onMessage: (chatJid: string, msg: NewMessage) => {
-      // Remote control commands — intercept before storage
-      const trimmed = msg.content.trim();
-      if (trimmed === '/remote-control' || trimmed === '/remote-control-end') {
-        handleRemoteControl(trimmed, chatJid, msg).catch((err) =>
-          logger.error({ err, chatJid }, 'Remote control command error'),
-        );
-        return;
-      }
-
-      // Sender allowlist drop mode: discard messages from denied senders before storing
-      if (!msg.is_from_me && !msg.is_bot_message && registeredGroups[chatJid]) {
-        const cfg = loadSenderAllowlist();
-        if (
-          shouldDropMessage(chatJid, cfg) &&
-          !isSenderAllowed(chatJid, msg.sender, cfg)
-        ) {
-          if (cfg.logDenied) {
-            logger.debug(
-              { chatJid, sender: msg.sender },
-              'sender-allowlist: dropping message (drop mode)',
-            );
-          }
-          return;
-        }
-      }
-      storeMessage(msg);
+      acceptInboundMessage(chatJid, msg);
     },
     onChatMetadata: (
       chatJid: string,
@@ -605,20 +743,26 @@ async function main(): Promise<void> {
     onProcess: (groupJid, proc, containerName, groupFolder) =>
       queue.registerProcess(groupJid, proc, containerName, groupFolder),
     sendMessage: async (jid, rawText) => {
-      const channel = findChannel(channels, jid);
-      if (!channel) {
-        logger.warn({ jid }, 'No channel owns JID, cannot send message');
-        return;
-      }
-      const text = formatOutbound(rawText);
-      if (text) await channel.sendMessage(jid, text);
+      await sendOutboundMessage(jid, rawText);
     },
   });
+  if (personalOpsService) {
+    personalOpsService.writePublicSnapshots();
+    startPersonalOpsScheduler({
+      service: personalOpsService,
+      getMainChatJid: getMainGroupJid,
+      sendMessage: async (chatJid, text) => {
+        await sendOutboundMessage(chatJid, text);
+      },
+    });
+  }
   startIpcWatcher({
     sendMessage: (jid, text) => {
-      const channel = findChannel(channels, jid);
-      if (!channel) throw new Error(`No channel for JID: ${jid}`);
-      return channel.sendMessage(jid, text);
+      return sendOutboundMessage(jid, text).then((result) => {
+        if (!result.ok) {
+          throw new Error(result.error);
+        }
+      });
     },
     registeredGroups: () => registeredGroups,
     registerGroup,
@@ -632,7 +776,280 @@ async function main(): Promise<void> {
     getAvailableGroups,
     writeGroupsSnapshot: (gf, im, ag, rj) =>
       writeGroupsSnapshot(gf, im, ag, rj),
+    personalOpsService,
   });
+
+  const operatorUiStart = await startOperatorUi({
+    getGroups: () => {
+      const inspectable = new Map(
+        queue.getInspectableStates().map((state) => [state.groupJid, state] as const),
+      );
+      const chats = new Map(getAllChats().map((chat) => [chat.jid, chat] as const));
+
+      return Object.entries(registeredGroups).map(([chatJid, group]) => {
+        const queueState = inspectable.get(chatJid);
+        const chat = chats.get(chatJid);
+        const session = sessions[group.folder];
+        return {
+          chatJid,
+          name: group.name,
+          folder: group.folder,
+          trigger: group.trigger,
+          addedAt: group.added_at,
+          requiresTrigger:
+            group.isMain === true ? false : group.requiresTrigger !== false,
+          isMain: group.isMain === true,
+          active:
+            queueState?.active === true && queueState.isTaskContainer !== true,
+          idleWaiting: queueState?.idleWaiting === true,
+          lastMessageTime: chat?.last_message_time,
+          channel: chat?.channel,
+          session,
+          transcriptPath:
+            session?.transcriptPath ||
+            path.join(
+              DATA_DIR,
+              'sessions',
+              group.folder,
+              'openai',
+              'current-transcript.jsonl',
+            ),
+        };
+      });
+    },
+    getMessages: (chatJid, limit) => getRecentConversationMessages(chatJid, limit),
+    getTasks: (groupFolder) => getTasksForGroup(groupFolder),
+    getTaskRuns: (taskId, limit) => getTaskRunLogs(taskId, limit),
+    injectMessage: (chatJid, text, sender, senderName) => {
+      const group = registeredGroups[chatJid];
+      if (!group) {
+        return { ok: false, error: 'Group is not registered.' };
+      }
+
+      const timestamp = new Date().toISOString();
+      storeChatMetadata(chatJid, timestamp, group.name);
+      const message: NewMessage = {
+        id: `ui_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        chat_jid: chatJid,
+        sender: sender || 'operator:ui',
+        sender_name: senderName || 'Operator UI',
+        content: text,
+        timestamp,
+        is_from_me: false,
+        is_bot_message: false,
+      };
+      acceptInboundMessage(chatJid, message);
+      return { ok: true, messageId: message.id };
+    },
+    sendInput: (chatJid, text) => queue.sendMessage(chatJid, text),
+    sendOutbound: async (chatJid, text) => {
+      const result = await sendOutboundMessage(chatJid, text);
+      return result.ok ? { ok: true } : result;
+    },
+    createTask: ({
+      chatJid,
+      groupFolder,
+      prompt,
+      scheduleType,
+      scheduleValue,
+      contextMode,
+    }) => {
+      const group = registeredGroups[chatJid];
+      if (!group || group.folder !== groupFolder) {
+        return { ok: false, error: 'Task target does not match a registered group.' };
+      }
+
+      let nextRun: string | null = null;
+      if (scheduleType === 'cron') {
+        try {
+          nextRun = CronExpressionParser.parse(scheduleValue, {
+            tz: TIMEZONE,
+          }).next().toISOString();
+        } catch {
+          return { ok: false, error: 'Invalid cron expression.' };
+        }
+      } else if (scheduleType === 'interval') {
+        const ms = parseInt(scheduleValue, 10);
+        if (isNaN(ms) || ms <= 0) {
+          return {
+            ok: false,
+            error: 'Interval must be a positive millisecond value.',
+          };
+        }
+        nextRun = new Date(Date.now() + ms).toISOString();
+      } else {
+        const date = new Date(scheduleValue);
+        if (isNaN(date.getTime())) {
+          return { ok: false, error: 'Invalid once timestamp.' };
+        }
+        nextRun = date.toISOString();
+      }
+
+      const taskId = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      createTask({
+        id: taskId,
+        group_folder: groupFolder,
+        chat_jid: chatJid,
+        prompt,
+        schedule_type: scheduleType,
+        schedule_value: scheduleValue,
+        context_mode: contextMode,
+        next_run: nextRun,
+        status: 'active',
+        created_at: new Date().toISOString(),
+      });
+      return { ok: true, taskId };
+    },
+    updateTask: ({
+      taskId,
+      prompt,
+      scheduleType,
+      scheduleValue,
+      contextMode,
+    }) => {
+      const task = getTaskById(taskId);
+      if (!task) {
+        return { ok: false, error: 'Task not found.' };
+      }
+
+      let nextRun: string | null = null;
+      if (scheduleType === 'cron') {
+        try {
+          nextRun = CronExpressionParser.parse(scheduleValue, {
+            tz: TIMEZONE,
+          }).next().toISOString();
+        } catch {
+          return { ok: false, error: 'Invalid cron expression.' };
+        }
+      } else if (scheduleType === 'interval') {
+        const ms = parseInt(scheduleValue, 10);
+        if (isNaN(ms) || ms <= 0) {
+          return {
+            ok: false,
+            error: 'Interval must be a positive millisecond value.',
+          };
+        }
+        nextRun = new Date(Date.now() + ms).toISOString();
+      } else {
+        const date = new Date(scheduleValue);
+        if (isNaN(date.getTime())) {
+          return { ok: false, error: 'Invalid once timestamp.' };
+        }
+        nextRun = date.toISOString();
+      }
+
+      updateTask(taskId, {
+        prompt,
+        schedule_type: scheduleType,
+        schedule_value: scheduleValue,
+        context_mode: contextMode,
+        next_run: nextRun,
+      });
+      return { ok: true };
+    },
+    pauseTask: (taskId) => {
+      const task = getTaskById(taskId);
+      if (!task) {
+        return { ok: false, error: 'Task not found.' };
+      }
+      updateTask(taskId, { status: 'paused' });
+      return { ok: true };
+    },
+    resumeTask: (taskId) => {
+      const task = getTaskById(taskId);
+      if (!task) {
+        return { ok: false, error: 'Task not found.' };
+      }
+      updateTask(taskId, { status: 'active' });
+      return { ok: true };
+    },
+    cancelTask: (taskId) => {
+      const task = getTaskById(taskId);
+      if (!task) {
+        return { ok: false, error: 'Task not found.' };
+      }
+      deleteTask(taskId);
+      return { ok: true };
+    },
+    personalOps: personalOpsService
+      ? {
+          listConnections: () => personalOpsService.listConnections(),
+          getToday: () => personalOpsService.getTodayView(),
+          getInbox: (input) => personalOpsService.getInboxView(input),
+          getCalendar: () => personalOpsService.getCalendarView(),
+          getWorkboard: () => personalOpsService.getWorkboardView(),
+          getHistory: (input) => personalOpsService.getHistoryView(input),
+          getHistoryWorkstreams: (input) =>
+            personalOpsService.getHistoryWorkstreams(input),
+          getReports: () => personalOpsService.getReports(),
+          generateReport: (reportType, range) =>
+            personalOpsService.generateReport(reportType, range),
+          getCorrections: () => personalOpsService.getCorrections(),
+          getClients: () => personalOpsService.getClients(),
+          getProjects: () => personalOpsService.getProjects(),
+          getRepositories: () => personalOpsService.getRepositories(),
+          getContacts: () => personalOpsService.getContacts(),
+          linkContact: (input) => personalOpsService.linkContact(input),
+          getOpenLoops: () => personalOpsService.getOpenLoops(),
+          getAssistantQuestions: (input) =>
+            personalOpsService.getAssistantQuestions(input),
+          answerAssistantQuestion: (input) =>
+            personalOpsService.answerAssistantQuestion(input),
+          dismissAssistantQuestion: (input) =>
+            personalOpsService.dismissAssistantQuestion(input),
+          getApprovalQueue: () => personalOpsService.getApprovalQueue(),
+          approveQueueItem: (id) => personalOpsService.approveQueueItem(id),
+          rejectQueueItem: (id) => personalOpsService.rejectQueueItem(id),
+          editQueueItem: (id, input) =>
+            personalOpsService.editQueueItem(id, input),
+          getMemoryFacts: () => personalOpsService.getMemoryFacts(),
+          acceptMemoryFact: (id) => personalOpsService.acceptMemoryFact(id),
+          rejectMemoryFact: (id) => personalOpsService.rejectMemoryFact(id),
+          getReviewQueue: () => personalOpsService.getReviewQueue(),
+          getImprovementTickets: () => personalOpsService.getImprovementTickets(),
+          approveImprovementTicket: (id) =>
+            personalOpsService.approveImprovementTicket(id),
+          rejectImprovementTicket: (id) =>
+            personalOpsService.rejectImprovementTicket(id),
+          editImprovementTicket: (id, input) =>
+            personalOpsService.editImprovementTicket(id, input),
+          reviewAccept: (id) => personalOpsService.reviewAccept(id),
+          reviewReject: (id) => personalOpsService.reviewReject(id),
+          getOperatorProfile: () => personalOpsService.getOperatorProfile(),
+          updateOperatorProfile: (input) =>
+            personalOpsService.updateOperatorProfile(input),
+          beginOAuth: (provider, appBaseUrl) =>
+            personalOpsService.beginOAuth(provider, appBaseUrl),
+          handleOAuthCallback: (provider, code, state, appBaseUrl) =>
+            personalOpsService.handleOAuthCallback(
+              provider,
+              code,
+              state,
+              appBaseUrl,
+            ),
+          disconnect: (input) => personalOpsService.disconnect(input),
+          getConnectionCatalog: (input) =>
+            personalOpsService.getConnectionCatalog(input),
+          updateConnectionSettings: (input) =>
+            personalOpsService.updateConnectionSettings(
+              { provider: input.provider, accountId: input.accountId },
+              input.settings,
+            ),
+          syncProvider: (input) => personalOpsService.syncProvider(input),
+          createManualTask: (input) => personalOpsService.createManualTask(input),
+          createManualNote: (input) => personalOpsService.createManualNote(input),
+          upsertClient: (input) => personalOpsService.upsertClient(input),
+          upsertProject: (input) => personalOpsService.upsertProject(input),
+          upsertRepository: (input) => personalOpsService.upsertRepository(input),
+          discoverRepositories: (input) =>
+            personalOpsService.discoverRepositories(input),
+          recordCorrection: (input) => personalOpsService.recordCorrection(input),
+        }
+      : undefined,
+  });
+  if (!operatorUiStart.ok) {
+    logger.warn({ error: operatorUiStart.error }, 'Operator UI unavailable');
+  }
   queue.setProcessMessagesFn(processGroupMessages);
   recoverPendingMessages();
   startMessageLoop().catch((err) => {
