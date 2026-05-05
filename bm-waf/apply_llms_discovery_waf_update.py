@@ -23,6 +23,11 @@ DISCOVERY_PATHS = (
     ("/sitemap.xml", "EXACTLY"),
 )
 
+AI_PUBLIC_DISCOVERY_PATHS = (
+    ("/", "EXACTLY"),
+    *DISCOVERY_PATHS,
+)
+
 STATIC_EXCLUSION_RULES = {
     "foreign-risk-captcha-ddos-asns",
     "foreign-risk-challenge-ddos-asns",
@@ -37,6 +42,7 @@ STATIC_EXCLUSION_RULES = {
 
 HTML_BURST_RULE = "domestic-precision-challenge-html-get-burst"
 OBSERVE_RULE = "observe-ai-discovery-static"
+AI_PUBLIC_DISCOVERY_RULE = "allow-ai-public-discovery-user-agents"
 
 
 def run(args):
@@ -92,8 +98,23 @@ def byte_header(name, value):
     }
 
 
+def byte_header_contains(name, value):
+    return {
+        "ByteMatchStatement": {
+            "SearchString": b64(value),
+            "FieldToMatch": {"SingleHeader": {"Name": name}},
+            "TextTransformations": [{"Priority": 0, "Type": "LOWERCASE"}],
+            "PositionalConstraint": "CONTAINS",
+        }
+    }
+
+
 def discovery_statements():
     return [byte_uri(path, constraint) for path, constraint in DISCOVERY_PATHS]
+
+
+def ai_public_discovery_statements():
+    return [byte_uri(path, constraint) for path, constraint in AI_PUBLIC_DISCOVERY_PATHS]
 
 
 def uri_key(statement):
@@ -188,6 +209,43 @@ def ensure_observe_rule(web_acl):
     return True
 
 
+def ensure_ai_public_discovery_allow_rule(web_acl):
+    if any(rule["Name"] == AI_PUBLIC_DISCOVERY_RULE for rule in web_acl["Rules"]):
+        return False
+    web_acl["Rules"].append(
+        {
+            "Name": AI_PUBLIC_DISCOVERY_RULE,
+            "Priority": 24,
+            "Statement": {
+                "AndStatement": {
+                    "Statements": [
+                        byte_header("host", "www.bettymills.com"),
+                        {"OrStatement": {"Statements": [byte_method("GET"), byte_method("HEAD")]}},
+                        {
+                            "OrStatement": {
+                                "Statements": [
+                                    byte_header_contains("user-agent", "chatgpt-user"),
+                                    byte_header_contains("user-agent", "claudebot"),
+                                    byte_header_contains("user-agent", "claude-user"),
+                                    byte_header_contains("user-agent", "claude-searchbot"),
+                                ]
+                            }
+                        },
+                        {"OrStatement": {"Statements": ai_public_discovery_statements()}},
+                    ]
+                }
+            },
+            "Action": {"Allow": {}},
+            "VisibilityConfig": {
+                "SampledRequestsEnabled": True,
+                "CloudWatchMetricsEnabled": True,
+                "MetricName": AI_PUBLIC_DISCOVERY_RULE,
+            },
+        }
+    )
+    return True
+
+
 def update_payload(acl):
     web_acl = acl["WebACL"]
     payload = {
@@ -252,6 +310,9 @@ def main():
             changes[rule["Name"]] = int(ensure_html_burst_exclusion(rule))
 
     changes[OBSERVE_RULE] = "added" if ensure_observe_rule(acl["WebACL"]) else "exists"
+    changes[AI_PUBLIC_DISCOVERY_RULE] = (
+        "added" if ensure_ai_public_discovery_allow_rule(acl["WebACL"]) else "exists"
+    )
     changed = any(value not in (0, "exists") for value in changes.values())
 
     payload = update_payload(acl)
